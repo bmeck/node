@@ -235,11 +235,11 @@ function isWarned(emitter) {
   assert.equal(readline.isFullWidthCodePoint('谢'.charCodeAt(0)), true);
   assert.equal(readline.isFullWidthCodePoint('고'.charCodeAt(0)), true);
   assert.equal(readline.isFullWidthCodePoint(0x1f251), true); // surrogate
-  assert.equal(readline.codePointAt('ABC', 0), 0x41);
-  assert.equal(readline.codePointAt('あいう', 1), 0x3044);
-  assert.equal(readline.codePointAt('\ud800\udc00', 0),  // surrogate
+  assert.equal('ABC'.codePointAt(0), 0x41);
+  assert.equal('あいう'.codePointAt(1), 0x3044);
+  assert.equal('\ud800\udc00'.codePointAt(0),  // surrogate
       0x10000);
-  assert.equal(readline.codePointAt('\ud800\udc00A', 2), // surrogate
+  assert.equal('\ud800\udc00A'.codePointAt(2), // surrogate
       0x41);
   assert.equal(readline.getStringWidth('abcde'), 5);
   assert.equal(readline.getStringWidth('古池や'), 6);
@@ -270,6 +270,30 @@ function isWarned(emitter) {
     assert.equal(isWarned(process.stdin._events), false);
     assert.equal(isWarned(process.stdout._events), false);
   }
+
+  //can create a new readline Interface with a null output arugument
+  fi = new FakeInput();
+  rli = new readline.Interface({input: fi, output: null, terminal: terminal });
+
+  called = false;
+  rli.on('line', function(line) {
+    called = true;
+    assert.equal(line, 'a\uD834\uDF06b');
+  });
+  fi.emit('data', 'a\uD834\uDF06\uD834\uDF06b\x1b[D\x1b[D\b\n');
+  assert.ok(called);
+
+  //can create a new readline Interface with a null output arugument
+  fi = new FakeInput();
+  rli = new readline.Interface({input: fi, output: null, terminal: terminal });
+
+  called = false;
+  rli.on('line', function(line) {
+    called = true;
+    assert.equal(line, 'ab\uD834\uDF06');
+  });
+  fi.emit('data', 'a\uD834\uDF06b\uD834\uDF06\x1b[H\x1b[C\x1b[C\x1b[3~\n');
+  assert.ok(called);
 
   //can create a new readline Interface with a null output arugument
   fi = new FakeInput();
