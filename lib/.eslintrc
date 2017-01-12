@@ -3,3 +3,6 @@ rules:
   require-buffer: 2
   buffer-constructor: 2
   no-let-in-for-declaration: 2
+
+  # Global Robustness
+  no-restricted-globals: [1, DataView, encodeURI, Date, EvalError, parseFloat, Set, RangeError, WeakMap, Uint8Array, Proxy, Array, Int32Array, Reflect, Int16Array, Function, Boolean, Uint8ClampedArray, unescape, Float64Array, ReferenceError, TypeError, encodeURIComponent, Symbol, Uint16Array, decodeURIComponent, Promise, Math, eval, WeakSet, Infinity, isFinite, decodeURI, Error, Intl, JSON, Uint32Array, String, Number, SyntaxError, Int8Array, isNaN, ArrayBuffer, RegExp, Map, URIError, parseInt, Float32Array, Object, escape, DTRACE_NET_SERVER_CONNECTION, DTRACE_NET_STREAM_END, DTRACE_HTTP_SERVER_REQUEST, DTRACE_HTTP_SERVER_RESPONSE, DTRACE_HTTP_CLIENT_REQUEST, DTRACE_HTTP_CLIENT_RESPONSE, global, process, GLOBAL, root, Buffer, clearImmediate, clearInterval, clearTimeout, setImmediate, setInterval, setTimeout, console, assert, buffer, child_process, cluster, crypto, dgram, dns, domain, events, fs, http, https, net, os, path, punycode, querystring, readline, repl, stream, string_decoder, tls, tty, url, util, v8, vm, zlib, constructor, hasOwnProperty, toString, toLocaleString, valueOf, isPrototypeOf, propertyIsEnumerable, __defineGetter__, __lookupGetter__, __defineSetter__, __lookupSetter__, __proto__]
