@@ -264,6 +264,8 @@ inline void Wrap(v8::Local<v8::Object> object, void* pointer);
 
 inline void ClearWrap(v8::Local<v8::Object> object);
 
+inline void WrapIsConstructCallback(const v8::FunctionCallbackInfo<v8::Value>& args);
+
 template <typename TypeName>
 inline TypeName* Unwrap(v8::Local<v8::Object> object);
 

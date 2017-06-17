@@ -59,13 +59,8 @@ void StreamWrap::Initialize(Local<Object> target,
                             Local<Context> context) {
   Environment* env = Environment::GetCurrent(context);
 
-  auto is_construct_call_callback =
-      [](const FunctionCallbackInfo<Value>& args) {
-    CHECK(args.IsConstructCall());
-    ClearWrap(args.This());
-  };
   Local<FunctionTemplate> sw =
-      FunctionTemplate::New(env->isolate(), is_construct_call_callback);
+      FunctionTemplate::New(env->isolate(), WrapIsConstructCallback);
   sw->InstanceTemplate()->SetInternalFieldCount(1);
   sw->SetClassName(FIXED_ONE_BYTE_STRING(env->isolate(), "ShutdownWrap"));
   env->SetProtoMethod(sw, "getAsyncId", AsyncWrap::GetAsyncId);
@@ -73,7 +68,7 @@ void StreamWrap::Initialize(Local<Object> target,
               sw->GetFunction());
 
   Local<FunctionTemplate> ww =
-      FunctionTemplate::New(env->isolate(), is_construct_call_callback);
+      FunctionTemplate::New(env->isolate(), WrapIsConstructCallback);
   ww->InstanceTemplate()->SetInternalFieldCount(1);
   ww->SetClassName(FIXED_ONE_BYTE_STRING(env->isolate(), "WriteWrap"));
   env->SetProtoMethod(ww, "getAsyncId", AsyncWrap::GetAsyncId);

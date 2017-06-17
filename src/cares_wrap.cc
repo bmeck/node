@@ -2092,13 +2092,8 @@ void Initialize(Local<Object> target,
   target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "AI_V4MAPPED"),
               Integer::New(env->isolate(), AI_V4MAPPED));
 
-  auto is_construct_call_callback =
-      [](const FunctionCallbackInfo<Value>& args) {
-    CHECK(args.IsConstructCall());
-    ClearWrap(args.This());
-  };
   Local<FunctionTemplate> aiw =
-      FunctionTemplate::New(env->isolate(), is_construct_call_callback);
+      FunctionTemplate::New(env->isolate(), WrapIsConstructCallback);
   aiw->InstanceTemplate()->SetInternalFieldCount(1);
   env->SetProtoMethod(aiw, "getAsyncId", AsyncWrap::GetAsyncId);
   aiw->SetClassName(
@@ -2107,7 +2102,7 @@ void Initialize(Local<Object> target,
               aiw->GetFunction());
 
   Local<FunctionTemplate> niw =
-      FunctionTemplate::New(env->isolate(), is_construct_call_callback);
+      FunctionTemplate::New(env->isolate(), WrapIsConstructCallback);
   niw->InstanceTemplate()->SetInternalFieldCount(1);
   env->SetProtoMethod(niw, "getAsyncId", AsyncWrap::GetAsyncId);
   niw->SetClassName(
@@ -2116,7 +2111,7 @@ void Initialize(Local<Object> target,
               niw->GetFunction());
 
   Local<FunctionTemplate> qrw =
-      FunctionTemplate::New(env->isolate(), is_construct_call_callback);
+      FunctionTemplate::New(env->isolate(), WrapIsConstructCallback);
   qrw->InstanceTemplate()->SetInternalFieldCount(1);
   env->SetProtoMethod(qrw, "getAsyncId", AsyncWrap::GetAsyncId);
   qrw->SetClassName(

@@ -237,6 +237,11 @@ void ClearWrap(v8::Local<v8::Object> object) {
   Wrap<void>(object, nullptr);
 }
 
+void WrapIsConstructCallback(const v8::FunctionCallbackInfo<v8::Value>& args) {
+  CHECK(args.IsConstructCall());
+  ClearWrap(args.This());
+}
+
 template <typename TypeName>
 TypeName* Unwrap(v8::Local<v8::Object> object) {
   CHECK_EQ(false, object.IsEmpty());
