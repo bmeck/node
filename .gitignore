@@ -1,3 +1,19 @@
+# Whitelist dotfiles
+.*
+!deps/**/.*
+!test/fixtures/**/.*
+!tools/eslint/**/.*
+!tools/doc/node_modules/**/.*
+!.editorconfig
+!.eslintignore
+!.eslintrc.yaml
+!.gitattributes
+!.github
+!.gitignore
+!.gitkeep
+!.mailmap
+!.remarkrc
+
 core
 vgcore.*
 v8*.log
@@ -12,16 +28,20 @@ tmp/
 test/tmp*/
 iojs
 iojs_g
+node
+node_g
 *.swp
 .benchmark_reports
-/.project
-/.cproject
 icu_config.gypi
+.eslintcache
+node_trace.*.log
 
 /out
 
 # various stuff that VC++ produces/uses
 Debug/
+!**/node_modules/debug/
+!deps/v8/src/debug/
 Release/
 !doc/blog/**
 *.sln
@@ -37,16 +57,23 @@ _UpgradeReport_Files/
 ipch/
 *.sdf
 *.opensdf
+*.VC.opendb
+.vs/
+.vscode/
+/deps/v8/src/debug/obj
+/*.exe
 
 /config.mk
 /config.gypi
+/config_fips.gypi
 *-nodegyp*
 /gyp-mac-tool
 /dist-osx
 /npm.wxs
 /tools/msvs/npm.wixobj
+/tools/msvs/genfiles/
 /tools/osx-pkg.pmdoc/index.xml
-/test/addons/doc-*/
+/test/addons/??_*/
 email.md
 deps/v8-*
 deps/icu
@@ -68,6 +95,9 @@ deps/openssl/openssl.xml
 deps/openssl/openssl.target.mk
 deps/zlib/zlib.target.mk
 
+# not needed and causes issues for distro packagers
+deps/npm/node_modules/.bin/
+
 # build/release artifacts
 /*.tar.*
 /SHASUMS*.txt*
@@ -75,8 +105,13 @@ deps/zlib/zlib.target.mk
 # test artifacts
 tools/faketime
 icu_config.gypi
-test.tap
+*.tap
 
 # Xcode workspaces and project folders
 *.xcodeproj
 *.xcworkspace
+
+# libuv book and GitHub template
+deps/uv/.github/
+deps/uv/docs/code/
+deps/uv/docs/src/guide/

@@ -1,8 +1,14 @@
-var EventEmitter = require('events');
-var assert = require('assert');
+'use strict';
+require('../common');
+const EventEmitter = require('events');
+const assert = require('assert');
 
-var EE = new EventEmitter();
+const EE = new EventEmitter();
 
-assert.throws(function() {
+assert.throws(() => {
   EE.emit('error', 'Accepts a string');
-}, /Accepts a string/);
+}, /^Error: Unhandled "error" event\. \(Accepts a string\)$/);
+
+assert.throws(() => {
+  EE.emit('error', { message: 'Error!' });
+}, /^Error: Unhandled "error" event\. \(\[object Object\]\)$/);

@@ -1,3 +1,4 @@
+'use strict';
 // throughput benchmark in signing and verifying
 var common = require('../common.js');
 var crypto = require('crypto');
@@ -9,10 +10,10 @@ var RSA_PublicPem = {};
 var RSA_PrivatePem = {};
 
 keylen_list.forEach(function(key) {
-  RSA_PublicPem[key] = fs.readFileSync(fixtures_keydir +
-                                       '/rsa_public_' + key + '.pem');
-  RSA_PrivatePem[key] = fs.readFileSync(fixtures_keydir +
-                                        '/rsa_private_' + key + '.pem');
+  RSA_PublicPem[key] =
+    fs.readFileSync(`${fixtures_keydir}/rsa_public_${key}.pem`);
+  RSA_PrivatePem[key] =
+    fs.readFileSync(`${fixtures_keydir}/rsa_private_${key}.pem`);
 });
 
 var bench = common.createBenchmark(main, {
@@ -22,9 +23,7 @@ var bench = common.createBenchmark(main, {
 });
 
 function main(conf) {
-  var crypto = require('crypto');
-  var message = (new Buffer(conf.len)).fill('b');
-
+  var message = Buffer.alloc(conf.len, 'b');
   bench.start();
   StreamWrite(conf.algo, conf.keylen, message, conf.n, conf.len);
 }
@@ -38,7 +37,7 @@ function StreamWrite(algo, keylen, message, n, len) {
   var publicKey = RSA_PublicPem[keylen];
   for (var i = 0; i < n; i++) {
     var enc = crypto.privateEncrypt(privateKey, message);
-    var clear = crypto.publicDecrypt(publicKey, enc);
+    crypto.publicDecrypt(publicKey, enc);
   }
 
   bench.end(kbits);

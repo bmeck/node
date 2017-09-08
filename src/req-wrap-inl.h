@@ -1,6 +1,8 @@
 #ifndef SRC_REQ_WRAP_INL_H_
 #define SRC_REQ_WRAP_INL_H_
 
+#if defined(NODE_WANT_INTERNALS) && NODE_WANT_INTERNALS
+
 #include "req-wrap.h"
 #include "async-wrap.h"
 #include "async-wrap-inl.h"
@@ -13,7 +15,7 @@ namespace node {
 
 template <typename T>
 ReqWrap<T>::ReqWrap(Environment* env,
-                    v8::Handle<v8::Object> object,
+                    v8::Local<v8::Object> object,
                     AsyncWrap::ProviderType provider)
     : AsyncWrap(env, object, provider) {
   if (env->in_domain())
@@ -37,5 +39,7 @@ void ReqWrap<T>::Dispatched() {
 }
 
 }  // namespace node
+
+#endif  // defined(NODE_WANT_INTERNALS) && NODE_WANT_INTERNALS
 
 #endif  // SRC_REQ_WRAP_INL_H_

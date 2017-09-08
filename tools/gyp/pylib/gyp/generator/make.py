@@ -31,6 +31,8 @@ import gyp.xcode_emulation
 from gyp.common import GetEnvironFallback
 from gyp.common import GypError
 
+import hashlib
+
 generator_default_variables = {
   'EXECUTABLE_PREFIX': '',
   'EXECUTABLE_SUFFIX': '',
@@ -90,7 +92,10 @@ def CalculateVariables(default_variables, params):
     if flavor == 'android':
       operating_system = 'linux'  # Keep this legacy behavior for now.
     default_variables.setdefault('OS', operating_system)
-    default_variables.setdefault('SHARED_LIB_SUFFIX', '.so')
+    if flavor == 'aix':
+      default_variables.setdefault('SHARED_LIB_SUFFIX', '.a')
+    else:
+      default_variables.setdefault('SHARED_LIB_SUFFIX', '.so')
     default_variables.setdefault('SHARED_LIB_DIR','$(builddir)/lib.$(TOOLSET)')
     default_variables.setdefault('LIB_DIR', '$(obj).$(TOOLSET)')
 
@@ -142,7 +147,7 @@ cmd_alink_thin = rm -f $@ && $(AR.$(TOOLSET)) crsT $@ $(filter %.o,$^)
 # special "figure out circular dependencies" flags around the entire
 # input list during linking.
 quiet_cmd_link = LINK($(TOOLSET)) $@
-cmd_link = $(LINK.$(TOOLSET)) $(GYP_LDFLAGS) $(LDFLAGS.$(TOOLSET)) -o $@ -Wl,--start-group $(LD_INPUTS) -Wl,--end-group $(LIBS)
+cmd_link = $(LINK.$(TOOLSET)) $(GYP_LDFLAGS) $(LDFLAGS.$(TOOLSET)) -o $@ -Wl,--start-group $(LD_INPUTS) $(LIBS) -Wl,--end-group
 
 # We support two kinds of shared objects (.so):
 # 1) shared_library, which is just bundling together many dependent libraries
@@ -211,10 +216,10 @@ cmd_solink_module_host = $(LINK.$(TOOLSET)) -shared $(GYP_LDFLAGS) $(LDFLAGS.$(T
 
 LINK_COMMANDS_AIX = """\
 quiet_cmd_alink = AR($(TOOLSET)) $@
-cmd_alink = rm -f $@ && $(AR.$(TOOLSET)) crs $@ $(filter %.o,$^)
+cmd_alink = rm -f $@ && $(AR.$(TOOLSET)) -X32_64 crs $@ $(filter %.o,$^)
 
 quiet_cmd_alink_thin = AR($(TOOLSET)) $@
-cmd_alink_thin = rm -f $@ && $(AR.$(TOOLSET)) crs $@ $(filter %.o,$^)
+cmd_alink_thin = rm -f $@ && $(AR.$(TOOLSET)) -X32_64 crs $@ $(filter %.o,$^)
 
 quiet_cmd_link = LINK($(TOOLSET)) $@
 cmd_link = $(LINK.$(TOOLSET)) $(GYP_LDFLAGS) $(LDFLAGS.$(TOOLSET)) -o $@ $(LD_INPUTS) $(LIBS)
@@ -273,9 +278,9 @@ all_deps :=
 %(make_global_settings)s
 
 CC.target ?= %(CC.target)s
-CFLAGS.target ?= $(CFLAGS)
+CFLAGS.target ?= $(CPPFLAGS) $(CFLAGS)
 CXX.target ?= %(CXX.target)s
-CXXFLAGS.target ?= $(CXXFLAGS)
+CXXFLAGS.target ?= $(CPPFLAGS) $(CXXFLAGS)
 LINK.target ?= %(LINK.target)s
 LDFLAGS.target ?= $(LDFLAGS)
 AR.target ?= $(AR)
@@ -286,9 +291,9 @@ LINK ?= $(CXX.target)
 # TODO(evan): move all cross-compilation logic to gyp-time so we don't need
 # to replicate this environment fallback in make as well.
 CC.host ?= %(CC.host)s
-CFLAGS.host ?=
+CFLAGS.host ?= $(CPPFLAGS_host) $(CFLAGS_host)
 CXX.host ?= %(CXX.host)s
-CXXFLAGS.host ?=
+CXXFLAGS.host ?= $(CPPFLAGS_host) $(CXXFLAGS_host)
 LINK.host ?= %(LINK.host)s
 LDFLAGS.host ?=
 AR.host ?= %(AR.host)s
@@ -365,7 +370,7 @@ cmd_touch = touch $@
 
 quiet_cmd_copy = COPY $@
 # send stderr to /dev/null to ignore messages when linking directories.
-cmd_copy = ln -f "$<" "$@" 2>/dev/null || (rm -rf "$@" && cp -af "$<" "$@")
+cmd_copy = ln -f "$<" "$@" 2>/dev/null || (rm -rf "$@" && cp %(copy_archive_args)s "$<" "$@")
 
 %(link_commands)s
 """
@@ -1019,7 +1024,8 @@ $(obj).$(TOOLSET)/$(TARGET)/%%.o: $(obj)/%%%s FORCE_DO_CMD
         # accidentally writing duplicate dummy rules for those outputs.
         self.WriteLn('%s: obj := $(abs_obj)' % outputs[0])
         self.WriteLn('%s: builddir := $(abs_builddir)' % outputs[0])
-        self.WriteMakeRule(outputs, inputs + ['FORCE_DO_CMD'], actions)
+        self.WriteMakeRule(outputs, inputs, actions,
+                           command="%s_%d" % (name, count))
         # Spaces in rule filenames are not supported, but rule variables have
         # spaces in them (e.g. RULE_INPUT_PATH expands to '$(abspath $<)').
         # The spaces within the variables are valid, so remove the variables
@@ -1346,7 +1352,10 @@ $(obj).$(TOOLSET)/$(TARGET)/%%.o: $(obj)/%%%s FORCE_DO_CMD
       if target[:3] == 'lib':
         target = target[3:]
       target_prefix = 'lib'
-      target_ext = '.so'
+      if self.flavor == 'aix':
+        target_ext = '.a'
+      else:
+        target_ext = '.so'
     elif self.type == 'none':
       target = '%s.stamp' % target
     elif self.type != 'executable':
@@ -1578,7 +1587,7 @@ $(obj).$(TOOLSET)/$(TARGET)/%%.o: $(obj)/%%%s FORCE_DO_CMD
       for link_dep in link_deps:
         assert ' ' not in link_dep, (
             "Spaces in alink input filenames not supported (%s)"  % link_dep)
-      if (self.flavor not in ('mac', 'openbsd', 'win') and not
+      if (self.flavor not in ('mac', 'openbsd', 'netbsd', 'win') and not
           self.is_standalone_static_library):
         self.WriteDoCmd([self.output_binary], link_deps, 'alink_thin',
                         part_of_all, postbuilds=postbuilds)
@@ -1688,6 +1697,7 @@ $(obj).$(TOOLSET)/$(TARGET)/%%.o: $(obj)/%%%s FORCE_DO_CMD
     self.WriteMakeRule(outputs, inputs,
                        actions = ['$(call do_cmd,%s%s)' % (command, suffix)],
                        comment = comment,
+                       command = command,
                        force = True)
     # Add our outputs to the list of targets we read depfiles from.
     # all_deps is only used for deps file reading, and for deps files we replace
@@ -1698,7 +1708,7 @@ $(obj).$(TOOLSET)/$(TARGET)/%%.o: $(obj)/%%%s FORCE_DO_CMD
 
 
   def WriteMakeRule(self, outputs, inputs, actions=None, comment=None,
-                    order_only=False, force=False, phony=False):
+                    order_only=False, force=False, phony=False, command=None):
     """Write a Makefile rule, with some extra tricks.
 
     outputs: a list of outputs for the rule (note: this is not directly
@@ -1711,6 +1721,7 @@ $(obj).$(TOOLSET)/$(TARGET)/%%.o: $(obj)/%%%s FORCE_DO_CMD
     force: if true, include FORCE_DO_CMD as an order-only dep
     phony: if true, the rule does not actually generate the named output, the
            output is just a name to run the rule
+    command: (optional) command name to generate unambiguous labels
     """
     outputs = map(QuoteSpaces, outputs)
     inputs = map(QuoteSpaces, inputs)
@@ -1719,44 +1730,41 @@ $(obj).$(TOOLSET)/$(TARGET)/%%.o: $(obj)/%%%s FORCE_DO_CMD
       self.WriteLn('# ' + comment)
     if phony:
       self.WriteLn('.PHONY: ' + ' '.join(outputs))
-    # TODO(evanm): just make order_only a list of deps instead of these hacks.
-    if order_only:
-      order_insert = '| '
-      pick_output = ' '.join(outputs)
-    else:
-      order_insert = ''
-      pick_output = outputs[0]
-    if force:
-      force_append = ' FORCE_DO_CMD'
-    else:
-      force_append = ''
     if actions:
       self.WriteLn("%s: TOOLSET := $(TOOLSET)" % outputs[0])
-    self.WriteLn('%s: %s%s%s' % (pick_output, order_insert, ' '.join(inputs),
-                                 force_append))
+    force_append = ' FORCE_DO_CMD' if force else ''
+
+    if order_only:
+      # Order only rule: Just write a simple rule.
+      # TODO(evanm): just make order_only a list of deps instead of this hack.
+      self.WriteLn('%s: | %s%s' %
+                   (' '.join(outputs), ' '.join(inputs), force_append))
+    elif len(outputs) == 1:
+      # Regular rule, one output: Just write a simple rule.
+      self.WriteLn('%s: %s%s' % (outputs[0], ' '.join(inputs), force_append))
+    else:
+      # Regular rule, more than one output: Multiple outputs are tricky in
+      # make. We will write three rules:
+      # - All outputs depend on an intermediate file.
+      # - Make .INTERMEDIATE depend on the intermediate.
+      # - The intermediate file depends on the inputs and executes the
+      #   actual command.
+      # - The intermediate recipe will 'touch' the intermediate file.
+      # - The multi-output rule will have an do-nothing recipe.
+
+      # Hash the target name to avoid generating overlong filenames.
+      cmddigest = hashlib.sha1(command if command else self.target).hexdigest()
+      intermediate = "%s.intermediate" % (cmddigest)
+      self.WriteLn('%s: %s' % (' '.join(outputs), intermediate))
+      self.WriteLn('\t%s' % '@:');
+      self.WriteLn('%s: %s' % ('.INTERMEDIATE', intermediate))
+      self.WriteLn('%s: %s%s' %
+                   (intermediate, ' '.join(inputs), force_append))
+      actions.insert(0, '$(call do_cmd,touch)')
+
     if actions:
       for action in actions:
         self.WriteLn('\t%s' % action)
-    if not order_only and len(outputs) > 1:
-      # If we have more than one output, a rule like
-      #   foo bar: baz
-      # that for *each* output we must run the action, potentially
-      # in parallel.  That is not what we're trying to write -- what
-      # we want is that we run the action once and it generates all
-      # the files.
-      # http://www.gnu.org/software/hello/manual/automake/Multiple-Outputs.html
-      # discusses this problem and has this solution:
-      # 1) Write the naive rule that would produce parallel runs of
-      # the action.
-      # 2) Make the outputs seralized on each other, so we won't start
-      # a parallel run until the first run finishes, at which point
-      # we'll have generated all the outputs and we're done.
-      self.WriteLn('%s: %s' % (' '.join(outputs[1:]), outputs[0]))
-      # Add a dummy command to the "extra outputs" rule, otherwise make seems to
-      # think these outputs haven't (couldn't have?) changed, and thus doesn't
-      # flag them as changed (i.e. include in '$?') when evaluating dependent
-      # rules, which in turn causes do_cmd() to skip running dependent commands.
-      self.WriteLn('%s: ;' % (' '.join(outputs[1:])))
     self.WriteLn()
 
 
@@ -2013,6 +2021,7 @@ def GenerateOutput(target_list, target_dicts, data, params):
     srcdir_prefix = '$(srcdir)/'
 
   flock_command= 'flock'
+  copy_archive_arguments = '-af'
   header_params = {
       'default_target': default_target,
       'builddir': builddir_name,
@@ -2022,6 +2031,7 @@ def GenerateOutput(target_list, target_dicts, data, params):
       'link_commands': LINK_COMMANDS_LINUX,
       'extra_commands': '',
       'srcdir': srcdir,
+      'copy_archive_args': copy_archive_arguments,
     }
   if flavor == 'mac':
     flock_command = './gyp-mac-tool flock'
@@ -2045,8 +2055,15 @@ def GenerateOutput(target_list, target_dicts, data, params):
     header_params.update({
         'flock': 'lockf',
     })
-  elif flavor == 'aix':
+  elif flavor == 'openbsd':
+    copy_archive_arguments = '-pPRf'
     header_params.update({
+        'copy_archive_args': copy_archive_arguments,
+    })
+  elif flavor == 'aix':
+    copy_archive_arguments = '-pPRf'
+    header_params.update({
+        'copy_archive_args': copy_archive_arguments,
         'link_commands': LINK_COMMANDS_AIX,
         'flock': './gyp-flock-tool flock',
         'flock_index': 2,
@@ -2057,10 +2074,10 @@ def GenerateOutput(target_list, target_dicts, data, params):
     'AR.target':   GetEnvironFallback(('AR_target', 'AR'), '$(AR)'),
     'CXX.target':  GetEnvironFallback(('CXX_target', 'CXX'), '$(CXX)'),
     'LINK.target': GetEnvironFallback(('LINK_target', 'LINK'), '$(LINK)'),
-    'CC.host':     GetEnvironFallback(('CC_host',), 'gcc'),
-    'AR.host':     GetEnvironFallback(('AR_host',), 'ar'),
-    'CXX.host':    GetEnvironFallback(('CXX_host',), 'g++'),
-    'LINK.host':   GetEnvironFallback(('LINK_host',), '$(CXX.host)'),
+    'CC.host':     GetEnvironFallback(('CC_host', 'CC'), 'gcc'),
+    'AR.host':     GetEnvironFallback(('AR_host', 'AR'), 'ar'),
+    'CXX.host':    GetEnvironFallback(('CXX_host', 'CXX'), 'g++'),
+    'LINK.host':   GetEnvironFallback(('LINK_host', 'LINK'), '$(CXX.host)'),
   })
 
   build_file, _, _ = gyp.common.ParseQualifiedTarget(target_list[0])

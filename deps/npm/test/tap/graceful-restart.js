@@ -10,36 +10,6 @@ var common = require('../common-tap.js')
 
 var pkg = resolve(__dirname, 'graceful-restart')
 
-test('setup', function (t) {
-  bootstrap()
-  t.end()
-})
-
-test('graceless restart', function (t) {
-  fs.writeFileSync(resolve(pkg, 'package.json'), pjGraceless)
-  createChild(['run-script', 'restart'], function (err, code, out) {
-    t.ifError(err, 'restart finished successfully')
-    t.equal(code, 0, 'npm run-script exited with code')
-    t.equal(out, outGraceless, 'expected all scripts to run')
-    t.end()
-  })
-})
-
-test('graceful restart', function (t) {
-  fs.writeFileSync(resolve(pkg, 'package.json'), pjGraceful)
-  createChild(['run-script', 'restart'], function (err, code, out) {
-    t.ifError(err, 'restart finished successfully')
-    t.equal(code, 0, 'npm run-script exited with code')
-    t.equal(out, outGraceful, 'expected only *restart scripts to run')
-    t.end()
-  })
-})
-
-test('clean', function (t) {
-  cleanup()
-  t.end()
-})
-
 var outGraceless = [
   'prerestart',
   'prestop',
@@ -90,6 +60,36 @@ var pjGraceful = JSON.stringify({
   }
 }, null, 2) + '\n'
 
+test('setup', function (t) {
+  bootstrap()
+  t.end()
+})
+
+test('graceless restart', function (t) {
+  fs.writeFileSync(resolve(pkg, 'package.json'), pjGraceless)
+  createChild(['run-script', 'restart'], function (err, code, out) {
+    t.ifError(err, 'restart finished successfully')
+    t.equal(code, 0, 'npm run-script exited with code')
+    t.equal(out.replace(/\r/g, ''), outGraceless, 'expected all scripts to run')
+    t.end()
+  })
+})
+
+test('graceful restart', function (t) {
+  fs.writeFileSync(resolve(pkg, 'package.json'), pjGraceful)
+  createChild(['run-script', 'restart'], function (err, code, out) {
+    t.ifError(err, 'restart finished successfully')
+    t.equal(code, 0, 'npm run-script exited with code')
+    t.equal(out.replace(/\r/g, ''), outGraceful, 'expected only *restart scripts to run')
+    t.end()
+  })
+})
+
+test('clean', function (t) {
+  cleanup()
+  t.end()
+})
+
 function bootstrap () {
   mkdirp.sync(pkg)
 }
@@ -107,8 +107,9 @@ function createChild (args, cb) {
     'npm_config_loglevel': 'silent'
   }
 
-  if (process.platform === 'win32')
+  if (process.platform === 'win32') {
     env.npm_config_cache = '%APPDATA%\\npm-cache'
+  }
 
   return common.npm(args, {
     cwd: pkg,

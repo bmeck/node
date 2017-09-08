@@ -4,7 +4,7 @@
  */
 "use strict";
 
-var chalk = require("chalk"),
+const chalk = require("chalk"),
     table = require("text-table");
 
 //------------------------------------------------------------------------------
@@ -18,7 +18,7 @@ var chalk = require("chalk"),
  * @returns {string} The original word with an s on the end if count is not one.
  */
 function pluralize(word, count) {
-    return (count === 1 ? word : word + "s");
+    return (count === 1 ? word : `${word}s`);
 }
 
 //------------------------------------------------------------------------------
@@ -27,33 +27,36 @@ function pluralize(word, count) {
 
 module.exports = function(results) {
 
-    var output = "\n",
-        total = 0,
-        errors = 0,
-        warnings = 0,
+    let output = "\n",
+        errorCount = 0,
+        warningCount = 0,
+        fixableErrorCount = 0,
+        fixableWarningCount = 0,
         summaryColor = "yellow";
 
-    results.forEach(function(result) {
-        var messages = result.messages;
+    results.forEach(result => {
+        const messages = result.messages;
 
         if (messages.length === 0) {
             return;
         }
 
-        total += messages.length;
-        output += chalk.underline(result.filePath) + "\n";
+        errorCount += result.errorCount;
+        warningCount += result.warningCount;
+        fixableErrorCount += result.fixableErrorCount;
+        fixableWarningCount += result.fixableWarningCount;
 
-        output += table(
-            messages.map(function(message) {
-                var messageType;
+        output += `${chalk.underline(result.filePath)}\n`;
+
+        output += `${table(
+            messages.map(message => {
+                let messageType;
 
                 if (message.fatal || message.severity === 2) {
                     messageType = chalk.red("error");
                     summaryColor = "red";
-                    errors++;
                 } else {
                     messageType = chalk.yellow("warning");
-                    warnings++;
                 }
 
                 return [
@@ -62,28 +65,34 @@ module.exports = function(results) {
                     message.column || 0,
                     messageType,
                     message.message.replace(/\.$/, ""),
-                    chalk.gray(message.ruleId || "")
+                    chalk.dim(message.ruleId || "")
                 ];
             }),
             {
                 align: ["", "r", "l"],
-                stringLength: function(str) {
+                stringLength(str) {
                     return chalk.stripColor(str).length;
                 }
             }
-        ).split("\n").map(function(el) {
-            return el.replace(/(\d+)\s+(\d+)/, function(m, p1, p2) {
-                return chalk.gray(p1 + ":" + p2);
-            });
-        }).join("\n") + "\n\n";
+        ).split("\n").map(el => el.replace(/(\d+)\s+(\d+)/, (m, p1, p2) => chalk.dim(`${p1}:${p2}`))).join("\n")}\n\n`;
     });
+
+    const total = errorCount + warningCount;
 
     if (total > 0) {
         output += chalk[summaryColor].bold([
             "\u2716 ", total, pluralize(" problem", total),
-            " (", errors, pluralize(" error", errors), ", ",
-            warnings, pluralize(" warning", warnings), ")\n"
+            " (", errorCount, pluralize(" error", errorCount), ", ",
+            warningCount, pluralize(" warning", warningCount), ")\n"
         ].join(""));
+
+        if (fixableErrorCount > 0 || fixableWarningCount > 0) {
+            output += chalk[summaryColor].bold([
+                "  ", fixableErrorCount, pluralize(" error", fixableErrorCount), ", ",
+                fixableWarningCount, pluralize(" warning", fixableWarningCount),
+                " potentially fixable with the `--fix` option.\n"
+            ].join(""));
+        }
     }
 
     return total > 0 ? output : "";

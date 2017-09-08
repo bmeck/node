@@ -1,6 +1,8 @@
-var net = require('net');
-var http = require('http');
-var util = require('util');
+'use strict';
+require('../common');
+const net = require('net');
+const http = require('http');
+const util = require('util');
 
 function Agent() {
   http.Agent.call(this);
@@ -8,8 +10,8 @@ function Agent() {
 util.inherits(Agent, http.Agent);
 
 Agent.prototype.createConnection = function() {
-  var self = this;
-  var socket = new net.Socket();
+  const self = this;
+  const socket = new net.Socket();
 
   socket.on('error', function() {
     socket.push('HTTP/1.1 200\r\n\r\n');
@@ -33,7 +35,7 @@ Agent.prototype.breakSocket = function breakSocket(socket) {
   socket.emit('error', new Error('Intentional error'));
 };
 
-var agent = new Agent();
+const agent = new Agent();
 
 http.request({
   agent: agent

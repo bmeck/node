@@ -5,7 +5,7 @@
 #ifndef V8_COMPILER_OSR_H_
 #define V8_COMPILER_OSR_H_
 
-#include "src/zone.h"
+#include "src/zone/zone.h"
 
 // TurboFan structures OSR graphs in a way that separates almost all phases of
 // compilation from OSR implementation details. This is accomplished with
@@ -99,8 +99,7 @@ class OsrHelper {
 
   // Deconstructs the artificial {OsrNormalEntry} and rewrites the graph so
   // that only the path corresponding to {OsrLoopEntry} remains.
-  // Return {false} if the OSR deconstruction failed somehow.
-  bool Deconstruct(JSGraph* jsgraph, CommonOperatorBuilder* common,
+  void Deconstruct(JSGraph* jsgraph, CommonOperatorBuilder* common,
                    Zone* tmp_zone);
 
   // Prepares the frame w.r.t. OSR.

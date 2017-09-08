@@ -4145,7 +4145,7 @@ typedef const UNICODE_STRING *PCUNICODE_STRING;
       struct {
         UCHAR  DataBuffer[1];
       } GenericReparseBuffer;
-    } DUMMYUNIONNAME;
+    };
   } REPARSE_DATA_BUFFER, *PREPARSE_DATA_BUFFER;
 #endif
 
@@ -4153,7 +4153,7 @@ typedef struct _IO_STATUS_BLOCK {
   union {
     NTSTATUS Status;
     PVOID Pointer;
-  } DUMMYUNIONNAME;
+  };
   ULONG_PTR Information;
 } IO_STATUS_BLOCK, *PIO_STATUS_BLOCK;
 
@@ -4606,6 +4606,10 @@ typedef NTSTATUS (NTAPI *sNtQueryDirectoryFile)
 #endif
 
 /* from winerror.h */
+#ifndef ERROR_ELEVATION_REQUIRED
+# define ERROR_ELEVATION_REQUIRED 740
+#endif
+
 #ifndef ERROR_SYMLINK_NOT_SUPPORTED
 # define ERROR_SYMLINK_NOT_SUPPORTED 1464
 #endif
@@ -4655,27 +4659,6 @@ typedef BOOL (WINAPI* sCancelIoEx)
              (HANDLE hFile,
               LPOVERLAPPED lpOverlapped);
 
-typedef VOID (WINAPI* sInitializeSRWLock)
-             (PSRWLOCK SRWLock);
-
-typedef VOID (WINAPI* sAcquireSRWLockShared)
-             (PSRWLOCK SRWLock);
-
-typedef VOID (WINAPI* sAcquireSRWLockExclusive)
-             (PSRWLOCK SRWLock);
-
-typedef BOOL (WINAPI* sTryAcquireSRWLockShared)
-             (PSRWLOCK SRWLock);
-
-typedef BOOL (WINAPI* sTryAcquireSRWLockExclusive)
-             (PSRWLOCK SRWLock);
-
-typedef VOID (WINAPI* sReleaseSRWLockShared)
-             (PSRWLOCK SRWLock);
-
-typedef VOID (WINAPI* sReleaseSRWLockExclusive)
-             (PSRWLOCK SRWLock);
-
 typedef VOID (WINAPI* sInitializeConditionVariable)
              (PCONDITION_VARIABLE ConditionVariable);
 
@@ -4699,6 +4682,46 @@ typedef VOID (WINAPI* sWakeConditionVariable)
 typedef BOOL (WINAPI* sCancelSynchronousIo)
              (HANDLE hThread);
 
+typedef DWORD (WINAPI* sGetFinalPathNameByHandleW)
+             (HANDLE hFile,
+              LPWSTR lpszFilePath,
+              DWORD cchFilePath,
+              DWORD dwFlags);
+
+/* from powerbase.h */
+#ifndef DEVICE_NOTIFY_CALLBACK
+# define DEVICE_NOTIFY_CALLBACK 2
+#endif
+
+#ifndef PBT_APMRESUMEAUTOMATIC
+# define PBT_APMRESUMEAUTOMATIC 18
+#endif
+
+#ifndef PBT_APMRESUMESUSPEND
+# define PBT_APMRESUMESUSPEND 7
+#endif
+
+typedef ULONG CALLBACK _DEVICE_NOTIFY_CALLBACK_ROUTINE(
+  PVOID Context,
+  ULONG Type,
+  PVOID Setting
+);
+typedef _DEVICE_NOTIFY_CALLBACK_ROUTINE* _PDEVICE_NOTIFY_CALLBACK_ROUTINE;
+
+typedef struct _DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS {
+  _PDEVICE_NOTIFY_CALLBACK_ROUTINE Callback;
+  PVOID Context;
+} _DEVICE_NOTIFY_SUBSCRIBE_PARAMETERS, *_PDEVICE_NOTIFY_SUBSCRIBE_PARAMETERS;
+
+typedef PVOID _HPOWERNOTIFY;
+typedef _HPOWERNOTIFY *_PHPOWERNOTIFY;
+
+typedef DWORD (WINAPI *sPowerRegisterSuspendResumeNotification)
+              (DWORD         Flags,
+               HANDLE        Recipient,
+               _PHPOWERNOTIFY RegistrationHandle);
+
+
 /* Ntdll function pointers */
 extern sRtlNtStatusToDosError pRtlNtStatusToDosError;
 extern sNtDeviceIoControlFile pNtDeviceIoControlFile;
@@ -4714,18 +4737,16 @@ extern sGetQueuedCompletionStatusEx pGetQueuedCompletionStatusEx;
 extern sSetFileCompletionNotificationModes pSetFileCompletionNotificationModes;
 extern sCreateSymbolicLinkW pCreateSymbolicLinkW;
 extern sCancelIoEx pCancelIoEx;
-extern sInitializeSRWLock pInitializeSRWLock;
-extern sAcquireSRWLockShared pAcquireSRWLockShared;
-extern sAcquireSRWLockExclusive pAcquireSRWLockExclusive;
-extern sTryAcquireSRWLockShared pTryAcquireSRWLockShared;
-extern sTryAcquireSRWLockExclusive pTryAcquireSRWLockExclusive;
-extern sReleaseSRWLockShared pReleaseSRWLockShared;
-extern sReleaseSRWLockExclusive pReleaseSRWLockExclusive;
 extern sInitializeConditionVariable pInitializeConditionVariable;
 extern sSleepConditionVariableCS pSleepConditionVariableCS;
 extern sSleepConditionVariableSRW pSleepConditionVariableSRW;
 extern sWakeAllConditionVariable pWakeAllConditionVariable;
 extern sWakeConditionVariable pWakeConditionVariable;
 extern sCancelSynchronousIo pCancelSynchronousIo;
+extern sGetFinalPathNameByHandleW pGetFinalPathNameByHandleW;
+
+
+/* Powrprof.dll function pointer */
+extern sPowerRegisterSuspendResumeNotification pPowerRegisterSuspendResumeNotification;
 
 #endif /* UV_WIN_WINAPI_H_ */

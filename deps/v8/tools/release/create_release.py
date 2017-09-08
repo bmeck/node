@@ -11,17 +11,11 @@ import urllib2
 
 from common_includes import *
 
-
 class Preparation(Step):
   MESSAGE = "Preparation."
 
   def RunStep(self):
-    fetchspecs = [
-      "+refs/heads/*:refs/heads/*",
-      "+refs/pending/*:refs/pending/*",
-      "+refs/pending-tags/*:refs/pending-tags/*",
-    ]
-    self.Git("fetch origin %s" % " ".join(fetchspecs))
+    self.Git("fetch origin +refs/heads/*:refs/heads/*")
     self.GitCheckout("origin/master")
     self.DeleteBranch("work-branch")
 
@@ -30,23 +24,10 @@ class PrepareBranchRevision(Step):
   MESSAGE = "Check from which revision to branch off."
 
   def RunStep(self):
-    if self._options.revision:
-      self["push_hash"], tree_object = self.GitLog(
-          n=1, format="\"%H %T\"", git_hash=self._options.revision).split(" ")
-    else:
-      self["push_hash"], tree_object = self.GitLog(
-          n=1, format="\"%H %T\"", branch="origin/master").split(" ")
-    print "Release revision %s" % self["push_hash"]
+    self["push_hash"] = (self._options.revision or
+                         self.GitLog(n=1, format="%H", branch="origin/master"))
     assert self["push_hash"]
-
-    pending_tuples = self.GitLog(
-        n=200, format="\"%H %T\"", branch="refs/pending/heads/master")
-    for hsh, tree in map(lambda s: s.split(" "), pending_tuples.splitlines()):
-      if tree == tree_object:
-        self["pending_hash"] = hsh
-        break
-    print "Pending release revision %s" % self["pending_hash"]
-    assert self["pending_hash"]
+    print "Release revision %s" % self["push_hash"]
 
 
 class IncrementVersion(Step):
@@ -169,14 +150,26 @@ class EditChangeLog(Step):
     TextToFile(changelog_entry, self.Config("CHANGELOG_ENTRY_FILE"))
 
 
+class PushBranchRef(Step):
+  MESSAGE = "Create branch ref."
+
+  def RunStep(self):
+    cmd = "push origin %s:refs/heads/%s" % (self["push_hash"], self["version"])
+    if self._options.dry_run:
+      print "Dry run. Command:\ngit %s" % cmd
+    else:
+      self.Git(cmd)
+
+
 class MakeBranch(Step):
   MESSAGE = "Create the branch."
 
   def RunStep(self):
     self.Git("reset --hard origin/master")
-    self.Git("checkout -b work-branch %s" % self["pending_hash"])
+    self.Git("new-branch work-branch --upstream origin/%s" % self["version"])
     self.GitCheckoutFile(CHANGELOG_FILE, self["latest_version"])
     self.GitCheckoutFile(VERSION_FILE, self["latest_version"])
+    self.GitCheckoutFile(WATCHLISTS_FILE, self["latest_version"])
 
 
 class AddChangeLog(Step):
@@ -194,6 +187,19 @@ class SetVersion(Step):
 
   def RunStep(self):
     self.SetVersion(os.path.join(self.default_cwd, VERSION_FILE), "new_")
+
+
+class EnableMergeWatchlist(Step):
+  MESSAGE = "Enable watchlist entry for merge notifications."
+
+  def RunStep(self):
+    old_watchlist_content = FileToText(os.path.join(self.default_cwd,
+                                                    WATCHLISTS_FILE))
+    new_watchlist_content = re.sub("(# 'v8-merges@googlegroups\.com',)",
+                                   "'v8-merges@googlegroups.com',",
+                                   old_watchlist_content)
+    TextToFile(new_watchlist_content, os.path.join(self.default_cwd,
+                                                   WATCHLISTS_FILE))
 
 
 class CommitBranch(Step):
@@ -227,13 +233,7 @@ class PushBranch(Step):
   MESSAGE = "Push changes."
 
   def RunStep(self):
-    pushspecs = [
-      "refs/heads/work-branch:refs/pending/heads/%s" % self["version"],
-      "%s:refs/pending-tags/heads/%s" %
-      (self["pending_hash"], self["version"]),
-      "%s:refs/heads/%s" % (self["push_hash"], self["version"]),
-    ]
-    cmd = "push origin %s" % " ".join(pushspecs)
+    cmd = "cl land --bypass-hooks -f"
     if self._options.dry_run:
       print "Dry run. Command:\ngit %s" % cmd
     else:
@@ -299,9 +299,11 @@ class CreateRelease(ScriptsBase):
       DetectLastRelease,
       PrepareChangeLog,
       EditChangeLog,
+      PushBranchRef,
       MakeBranch,
       AddChangeLog,
       SetVersion,
+      EnableMergeWatchlist,
       CommitBranch,
       PushBranch,
       TagRevision,

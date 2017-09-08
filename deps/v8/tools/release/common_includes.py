@@ -46,10 +46,11 @@ from git_recipes import GitRecipesMixin
 from git_recipes import GitFailedException
 
 CHANGELOG_FILE = "ChangeLog"
+DAY_IN_SECONDS = 24 * 60 * 60
 PUSH_MSG_GIT_RE = re.compile(r".* \(based on (?P<git_rev>[a-fA-F0-9]+)\)$")
 PUSH_MSG_NEW_RE = re.compile(r"^Version \d+\.\d+\.\d+$")
-VERSION_FILE = os.path.join("src", "version.cc")
-VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:\.\d+)?$")
+VERSION_FILE = os.path.join("include", "v8-version.h")
+WATCHLISTS_FILE = "WATCHLISTS"
 
 # V8 base directory.
 V8_BASE = os.path.dirname(
@@ -205,6 +206,30 @@ def Command(cmd, args="", prefix="", pipe=True, cwd=None):
     sys.stderr.flush()
 
 
+def SanitizeVersionTag(tag):
+    version_without_prefix = re.compile(r"^\d+\.\d+\.\d+(?:\.\d+)?$")
+    version_with_prefix = re.compile(r"^tags\/\d+\.\d+\.\d+(?:\.\d+)?$")
+
+    if version_without_prefix.match(tag):
+      return tag
+    elif version_with_prefix.match(tag):
+        return tag[len("tags/"):]
+    else:
+      return None
+
+
+def NormalizeVersionTags(version_tags):
+  normalized_version_tags = []
+
+  # Remove tags/ prefix because of packed refs.
+  for current_tag in version_tags:
+    version_tag = SanitizeVersionTag(current_tag)
+    if version_tag != None:
+      normalized_version_tags.append(version_tag)
+
+  return normalized_version_tags
+
+
 # Wrapper for side effects.
 class SideEffectHandler(object):  # pragma: no cover
   def Call(self, fun, *args, **kwargs):
@@ -357,7 +382,7 @@ class GitInterface(VCInterface):
     # is the case for all automated merge and push commits - also no title is
     # the prefix of another title).
     commit = None
-    for wait_interval in [3, 7, 15, 35, 45, 60]:
+    for wait_interval in [10, 30, 60, 60, 60, 60, 60]:
       self.step.Git("fetch")
       commit = self.step.GitLog(n=1, format="%H", grep=message, branch=remote)
       if commit:
@@ -510,12 +535,12 @@ class Step(GitRecipesMixin):
     answer = self.ReadLine(default="Y")
     return answer == "" or answer == "Y" or answer == "y"
 
-  def DeleteBranch(self, name):
-    for line in self.GitBranch().splitlines():
+  def DeleteBranch(self, name, cwd=None):
+    for line in self.GitBranch(cwd=cwd).splitlines():
       if re.match(r"\*?\s*%s$" % re.escape(name), line):
         msg = "Branch %s exists, do you want to delete it?" % name
         if self.Confirm(msg):
-          self.GitDeleteBranch(name)
+          self.GitDeleteBranch(name, cwd=cwd)
           print "Branch %s deleted." % name
         else:
           msg = "Can't continue. Please delete branch %s and try again." % name
@@ -537,8 +562,8 @@ class Step(GitRecipesMixin):
     if not self.GitIsWorkdirClean():  # pragma: no cover
       self.Die("Workspace is not clean. Please commit or undo your changes.")
 
-    # Persist current branch.
-    self["current_branch"] = self.GitCurrentBranch()
+    # Checkout master in case the script was left on a work branch.
+    self.GitCheckout('origin/master')
 
     # Fetch unfetched revisions.
     self.vc.Fetch()
@@ -548,12 +573,8 @@ class Step(GitRecipesMixin):
     self.DeleteBranch(self._config["BRANCHNAME"])
 
   def CommonCleanup(self):
-    if ' ' in self["current_branch"]:
-      self.GitCheckout('master')
-    else:
-      self.GitCheckout(self["current_branch"])
-    if self._config["BRANCHNAME"] != self["current_branch"]:
-      self.GitDeleteBranch(self._config["BRANCHNAME"])
+    self.GitCheckout('origin/master')
+    self.GitDeleteBranch(self._config["BRANCHNAME"])
 
     # Clean up all temporary files.
     for f in glob.iglob("%s*" % self._config["PERSISTFILE_BASENAME"]):
@@ -569,10 +590,10 @@ class Step(GitRecipesMixin):
         value = match.group(1)
         self["%s%s" % (prefix, var_name)] = value
     for line in LinesInFile(os.path.join(self.default_cwd, VERSION_FILE)):
-      for (var_name, def_name) in [("major", "MAJOR_VERSION"),
-                                   ("minor", "MINOR_VERSION"),
-                                   ("build", "BUILD_NUMBER"),
-                                   ("patch", "PATCH_LEVEL")]:
+      for (var_name, def_name) in [("major", "V8_MAJOR_VERSION"),
+                                   ("minor", "V8_MINOR_VERSION"),
+                                   ("build", "V8_BUILD_NUMBER"),
+                                   ("patch", "V8_PATCH_LEVEL")]:
         ReadAndPersist(var_name, def_name)
 
   def WaitForLGTM(self):
@@ -590,7 +611,7 @@ class Step(GitRecipesMixin):
   def WaitForResolvingConflicts(self, patch_file):
     print("Applying the patch \"%s\" failed. Either type \"ABORT<Return>\", "
           "or resolve the conflicts, stage *all* touched files with "
-          "'git add', and type \"RESOLVED<Return>\"")
+          "'git add', and type \"RESOLVED<Return>\"" % (patch_file))
     self.DieNoManualMode()
     answer = ""
     while answer != "RESOLVED":
@@ -610,10 +631,7 @@ class Step(GitRecipesMixin):
 
   def GetVersionTag(self, revision):
     tag = self.Git("describe --tags %s" % revision).strip()
-    if VERSION_RE.match(tag):
-      return tag
-    else:
-      return None
+    return SanitizeVersionTag(tag)
 
   def GetRecentReleases(self, max_age):
     # Make sure tags are fetched.
@@ -636,7 +654,11 @@ class Step(GitRecipesMixin):
 
     # Make sure tags are fetched.
     self.Git("fetch origin +refs/tags/*:refs/tags/*")
-    version = sorted(filter(VERSION_RE.match, self.vc.GetTags()),
+
+    all_tags = self.vc.GetTags()
+    only_version_tags = NormalizeVersionTags(all_tags)
+
+    version = sorted(only_version_tags,
                      key=SortingKey, reverse=True)[0]
     self["latest_version"] = version
     return version
@@ -701,25 +723,28 @@ class Step(GitRecipesMixin):
   def SetVersion(self, version_file, prefix):
     output = ""
     for line in FileToText(version_file).splitlines():
-      if line.startswith("#define MAJOR_VERSION"):
+      if line.startswith("#define V8_MAJOR_VERSION"):
         line = re.sub("\d+$", self[prefix + "major"], line)
-      elif line.startswith("#define MINOR_VERSION"):
+      elif line.startswith("#define V8_MINOR_VERSION"):
         line = re.sub("\d+$", self[prefix + "minor"], line)
-      elif line.startswith("#define BUILD_NUMBER"):
+      elif line.startswith("#define V8_BUILD_NUMBER"):
         line = re.sub("\d+$", self[prefix + "build"], line)
-      elif line.startswith("#define PATCH_LEVEL"):
+      elif line.startswith("#define V8_PATCH_LEVEL"):
         line = re.sub("\d+$", self[prefix + "patch"], line)
       elif (self[prefix + "candidate"] and
-            line.startswith("#define IS_CANDIDATE_VERSION")):
+            line.startswith("#define V8_IS_CANDIDATE_VERSION")):
         line = re.sub("\d+$", self[prefix + "candidate"], line)
       output += "%s\n" % line
     TextToFile(output, version_file)
 
 
 class BootstrapStep(Step):
-  MESSAGE = "Bootstapping v8 checkout."
+  MESSAGE = "Bootstrapping checkout and state."
 
   def RunStep(self):
+    # Reserve state entry for json output.
+    self['json_output'] = {}
+
     if os.path.realpath(self.default_cwd) == os.path.realpath(V8_BASE):
       self.Die("Can't use v8 checkout with calling script as work checkout.")
     # Directory containing the working v8 checkout.
@@ -742,41 +767,7 @@ class UploadStep(Step):
       reviewer = self.ReadLine()
     self.GitUpload(reviewer, self._options.author, self._options.force_upload,
                    bypass_hooks=self._options.bypass_upload_hooks,
-                   cc=self._options.cc)
-
-
-class DetermineV8Sheriff(Step):
-  MESSAGE = "Determine the V8 sheriff for code review."
-
-  def RunStep(self):
-    self["sheriff"] = None
-    if not self._options.sheriff:  # pragma: no cover
-      return
-
-    try:
-      # The googlers mapping maps @google.com accounts to @chromium.org
-      # accounts.
-      googlers = imp.load_source('googlers_mapping',
-                                 self._options.googlers_mapping)
-      googlers = googlers.list_to_dict(googlers.get_list())
-    except:  # pragma: no cover
-      print "Skip determining sheriff without googler mapping."
-      return
-
-    # The sheriff determined by the rotation on the waterfall has a
-    # @google.com account.
-    url = "https://chromium-build.appspot.com/p/chromium/sheriff_v8.js"
-    match = re.match(r"document\.write\('(\w+)'\)", self.ReadURL(url))
-
-    # If "channel is sheriff", we can't match an account.
-    if match:
-      g_name = match.group(1)
-      self["sheriff"] = googlers.get(g_name + "@google.com",
-                                     g_name + "@chromium.org")
-      self._options.reviewer = self["sheriff"]
-      print "Found active sheriff: %s" % self["sheriff"]
-    else:
-      print "No active sheriff found."
+                   cc=self._options.cc, use_gerrit=not self._options.rietveld)
 
 
 def MakeStep(step_class=Step, number=0, state=None, config=None,
@@ -825,14 +816,12 @@ class ScriptsBase(object):
                         help="The author email used for rietveld.")
     parser.add_argument("--dry-run", default=False, action="store_true",
                         help="Perform only read-only actions.")
-    parser.add_argument("-g", "--googlers-mapping",
-                        help="Path to the script mapping google accounts.")
+    parser.add_argument("--json-output",
+                        help="File to write results summary to.")
     parser.add_argument("-r", "--reviewer", default="",
                         help="The account name to be used for reviews.")
-    parser.add_argument("--sheriff", default=False, action="store_true",
-                        help=("Determine current sheriff to review CLs. On "
-                              "success, this will overwrite the reviewer "
-                              "option."))
+    parser.add_argument("--rietveld", default=False, action="store_true",
+                        help="Whether to use rietveld instead of gerrit.")
     parser.add_argument("-s", "--step",
         help="Specify the step where to start work. Default: 0.",
         default=0, type=int)
@@ -849,10 +838,6 @@ class ScriptsBase(object):
     # Process common options.
     if options.step < 0:  # pragma: no cover
       print "Bad step number %d" % options.step
-      parser.print_help()
-      return None
-    if options.sheriff and not options.googlers_mapping:  # pragma: no cover
-      print "To determine the current sheriff, requires the googler mapping"
       parser.print_help()
       return None
 
@@ -889,9 +874,16 @@ class ScriptsBase(object):
     for (number, step_class) in enumerate([BootstrapStep] + step_classes):
       steps.append(MakeStep(step_class, number, self._state, self._config,
                             options, self._side_effect_handler))
-    for step in steps[options.step:]:
-      if step.Run():
-        return 0
+
+    try:
+      for step in steps[options.step:]:
+        if step.Run():
+          return 0
+    finally:
+      if options.json_output:
+        with open(options.json_output, "w") as f:
+          json.dump(self._state['json_output'], f)
+
     return 0
 
   def Run(self, args=None):

@@ -3,8 +3,9 @@ npm-view(1) -- View registry info
 
 ## SYNOPSIS
 
-    npm view [@<scope>/]<name>[@<version>] [<field>[.<subfield>]...]
-    npm v [@<scope>/]<name>[@<version>] [<field>[.<subfield>]...]
+    npm view [<@scope>/]<name>[@<version>] [<field>[.<subfield>]...]
+
+    aliases: info, show, v
 
 ## DESCRIPTION
 
@@ -49,7 +50,7 @@ contributor in the list, you can do this:
     npm view express contributors[0].email
 
 Multiple fields may be specified, and will be printed one after another.
-For exampls, to get all the contributor names and email addresses, you
+For example, to get all the contributor names and email addresses, you
 can do this:
 
     npm view express contributors.name contributors.email
@@ -65,6 +66,11 @@ matching version of the package.  This will show which version of jsdom
 was required by each matching version of yui3:
 
     npm view yui3@'>0.5.4' dependencies.jsdom
+
+To show the `connect` package version history, you can do
+this:
+
+    npm view connect versions
 
 ## OUTPUT
 

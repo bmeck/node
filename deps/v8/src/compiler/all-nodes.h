@@ -5,9 +5,8 @@
 #ifndef V8_COMPILER_ALL_NODES_H_
 #define V8_COMPILER_ALL_NODES_H_
 
-#include "src/compiler/graph.h"
 #include "src/compiler/node.h"
-#include "src/zone-containers.h"
+#include "src/zone/zone-containers.h"
 
 namespace v8 {
 namespace internal {
@@ -17,25 +16,37 @@ namespace compiler {
 // from end.
 class AllNodes {
  public:
-  // Constructor. Traverses the graph and builds the {live} and {gray} sets.
-  AllNodes(Zone* local_zone, const Graph* graph);
+  // Constructor. Traverses the graph and builds the {reachable} set of nodes
+  // reachable from {end}. When {only_inputs} is true, find the nodes
+  // reachable through input edges; these are all live nodes.
+  AllNodes(Zone* local_zone, Node* end, const Graph* graph,
+           bool only_inputs = true);
+  // Constructor. Traverses the graph and builds the {reachable} set of nodes
+  // reachable from the End node.
+  AllNodes(Zone* local_zone, const Graph* graph, bool only_inputs = true);
 
   bool IsLive(Node* node) {
-    return node != nullptr && node->id() < static_cast<int>(state.size()) &&
-           state[node->id()] == kLive;
+    CHECK(only_inputs_);
+    return IsReachable(node);
   }
 
-  NodeVector live;  // Nodes reachable from end.
-  NodeVector gray;  // Nodes themselves not reachable from end, but that
-                    // appear in use lists of live nodes.
+  bool IsReachable(Node* node) {
+    if (!node) return false;
+    size_t id = node->id();
+    return id < is_reachable_.size() && is_reachable_[id];
+  }
+
+  NodeVector reachable;  // Nodes reachable from end.
 
  private:
-  enum State { kDead, kGray, kLive };
+  void Mark(Zone* local_zone, Node* end, const Graph* graph);
 
-  ZoneVector<State> state;
+  BoolVector is_reachable_;
+  const bool only_inputs_;
 };
-}
-}
-}  // namespace v8::internal::compiler
+
+}  // namespace compiler
+}  // namespace internal
+}  // namespace v8
 
 #endif  // V8_COMPILER_ALL_NODES_H_

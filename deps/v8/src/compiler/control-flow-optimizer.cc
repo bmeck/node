@@ -4,7 +4,8 @@
 
 #include "src/compiler/control-flow-optimizer.h"
 
-#include "src/compiler/js-graph.h"
+#include "src/compiler/common-operator.h"
+#include "src/compiler/graph.h"
 #include "src/compiler/node-matchers.h"
 #include "src/compiler/node-properties.h"
 
@@ -12,10 +13,15 @@ namespace v8 {
 namespace internal {
 namespace compiler {
 
-ControlFlowOptimizer::ControlFlowOptimizer(JSGraph* jsgraph, Zone* zone)
-    : jsgraph_(jsgraph),
+ControlFlowOptimizer::ControlFlowOptimizer(Graph* graph,
+                                           CommonOperatorBuilder* common,
+                                           MachineOperatorBuilder* machine,
+                                           Zone* zone)
+    : graph_(graph),
+      common_(common),
+      machine_(machine),
       queue_(zone),
-      queued_(jsgraph->graph(), 2),
+      queued_(graph, 2),
       zone_(zone) {}
 
 
@@ -46,21 +52,31 @@ void ControlFlowOptimizer::Enqueue(Node* node) {
 
 
 void ControlFlowOptimizer::VisitNode(Node* node) {
-  for (Node* use : node->uses()) {
-    if (NodeProperties::IsControl(use)) Enqueue(use);
+  for (Edge edge : node->use_edges()) {
+    if (NodeProperties::IsControlEdge(edge)) {
+      Enqueue(edge.from());
+    }
   }
 }
 
 
 void ControlFlowOptimizer::VisitBranch(Node* node) {
   DCHECK_EQ(IrOpcode::kBranch, node->opcode());
+  if (TryBuildSwitch(node)) return;
+  VisitNode(node);
+}
+
+
+bool ControlFlowOptimizer::TryBuildSwitch(Node* node) {
+  DCHECK_EQ(IrOpcode::kBranch, node->opcode());
 
   Node* branch = node;
+  if (BranchHintOf(branch->op()) != BranchHint::kNone) return false;
   Node* cond = NodeProperties::GetValueInput(branch, 0);
-  if (cond->opcode() != IrOpcode::kWord32Equal) return VisitNode(node);
+  if (cond->opcode() != IrOpcode::kWord32Equal) return false;
   Int32BinopMatcher m(cond);
   Node* index = m.left().node();
-  if (!m.right().HasValue()) return VisitNode(node);
+  if (!m.right().HasValue()) return false;
   int32_t value = m.right().Value();
   ZoneSet<int32_t> values(zone());
   values.insert(value);
@@ -68,17 +84,17 @@ void ControlFlowOptimizer::VisitBranch(Node* node) {
   Node* if_false;
   Node* if_true;
   while (true) {
-    Node* control_projections[2];
-    NodeProperties::CollectControlProjections(branch, control_projections, 2);
-    if_true = control_projections[0];
-    if_false = control_projections[1];
-    DCHECK_EQ(IrOpcode::kIfTrue, if_true->opcode());
-    DCHECK_EQ(IrOpcode::kIfFalse, if_false->opcode());
+    BranchMatcher matcher(branch);
+    DCHECK(matcher.Matched());
+
+    if_true = matcher.IfTrue();
+    if_false = matcher.IfFalse();
 
     auto it = if_false->uses().begin();
     if (it == if_false->uses().end()) break;
     Node* branch1 = *it++;
     if (branch1->opcode() != IrOpcode::kBranch) break;
+    if (BranchHintOf(branch1->op()) != BranchHint::kNone) break;
     if (it != if_false->uses().end()) break;
     Node* cond1 = branch1->InputAt(0);
     if (cond1->opcode() != IrOpcode::kWord32Equal) break;
@@ -90,11 +106,11 @@ void ControlFlowOptimizer::VisitBranch(Node* node) {
     DCHECK_NE(value, value1);
 
     if (branch != node) {
-      branch->RemoveAllInputs();
+      branch->NullAllInputs();
       if_true->ReplaceInput(0, node);
     }
-    if_true->set_op(common()->IfValue(value));
-    if_false->RemoveAllInputs();
+    NodeProperties::ChangeOp(if_true, common()->IfValue(value));
+    if_false->NullAllInputs();
     Enqueue(if_true);
 
     branch = branch1;
@@ -104,37 +120,21 @@ void ControlFlowOptimizer::VisitBranch(Node* node) {
 
   DCHECK_EQ(IrOpcode::kBranch, node->opcode());
   DCHECK_EQ(IrOpcode::kBranch, branch->opcode());
-  DCHECK_EQ(IrOpcode::kIfTrue, if_true->opcode());
-  DCHECK_EQ(IrOpcode::kIfFalse, if_false->opcode());
   if (branch == node) {
     DCHECK_EQ(1u, values.size());
-    Enqueue(if_true);
-    Enqueue(if_false);
-  } else {
-    DCHECK_LT(1u, values.size());
-    node->set_op(common()->Switch(values.size() + 1));
-    node->ReplaceInput(0, index);
-    if_true->set_op(common()->IfValue(value));
-    if_true->ReplaceInput(0, node);
-    Enqueue(if_true);
-    if_false->set_op(common()->IfDefault());
-    if_false->ReplaceInput(0, node);
-    Enqueue(if_false);
-    branch->RemoveAllInputs();
+    return false;
   }
-}
-
-
-CommonOperatorBuilder* ControlFlowOptimizer::common() const {
-  return jsgraph()->common();
-}
-
-
-Graph* ControlFlowOptimizer::graph() const { return jsgraph()->graph(); }
-
-
-MachineOperatorBuilder* ControlFlowOptimizer::machine() const {
-  return jsgraph()->machine();
+  DCHECK_LT(1u, values.size());
+  node->ReplaceInput(0, index);
+  NodeProperties::ChangeOp(node, common()->Switch(values.size() + 1));
+  if_true->ReplaceInput(0, node);
+  NodeProperties::ChangeOp(if_true, common()->IfValue(value));
+  Enqueue(if_true);
+  if_false->ReplaceInput(0, node);
+  NodeProperties::ChangeOp(if_false, common()->IfDefault());
+  Enqueue(if_false);
+  branch->NullAllInputs();
+  return true;
 }
 
 }  // namespace compiler

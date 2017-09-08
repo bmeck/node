@@ -110,7 +110,7 @@ x86_64-gf2m.s:	asm/x86_64-gf2m.pl
 	$(PERL) asm/x86_64-gf2m.pl $(PERLASM_SCHEME) > $@
 rsaz-x86_64.s:	asm/rsaz-x86_64.pl
 	$(PERL) asm/rsaz-x86_64.pl $(PERLASM_SCHEME) > $@
-rsaz-avx2.s:	asm/rsaz-avx2.pl
+rsaz-avx2.s:	asm/rsaz-avx2.pl 
 	$(PERL) asm/rsaz-avx2.pl $(PERLASM_SCHEME) > $@
 
 bn-ia64.s:	asm/ia64.S
@@ -176,6 +176,8 @@ tests:
 lint:
 	lint -DLINT $(INCLUDES) $(SRC)>fluff
 
+update: bn_prime.h depend
+
 depend:
 	@[ -n "$(MAKEDEPEND)" ] # should be set by upper Makefile...
 	$(MAKEDEPEND) -- $(CFLAG) $(INCLUDES) $(DEPFLAG) -- $(PROGS) $(LIBSRC)
@@ -185,7 +187,7 @@ dclean:
 	mv -f Makefile.new $(MAKEFILE)
 
 clean:
-	rm -f *.s *.o *.obj lib tags core .pure .nfs* *.old *.bak fluff
+	rm -f *.s *.S *.o *.obj lib tags core .pure .nfs* *.old *.bak fluff
 
 # DO NOT DELETE THIS LINE -- make depend depends on it.
 
@@ -250,7 +252,8 @@ bn_exp.o: ../../include/openssl/e_os2.h ../../include/openssl/err.h
 bn_exp.o: ../../include/openssl/lhash.h ../../include/openssl/opensslconf.h
 bn_exp.o: ../../include/openssl/opensslv.h ../../include/openssl/ossl_typ.h
 bn_exp.o: ../../include/openssl/safestack.h ../../include/openssl/stack.h
-bn_exp.o: ../../include/openssl/symhacks.h ../cryptlib.h bn_exp.c bn_lcl.h
+bn_exp.o: ../../include/openssl/symhacks.h ../constant_time_locl.h
+bn_exp.o: ../cryptlib.h bn_exp.c bn_lcl.h rsaz_exp.h
 bn_exp2.o: ../../e_os.h ../../include/openssl/bio.h ../../include/openssl/bn.h
 bn_exp2.o: ../../include/openssl/buffer.h ../../include/openssl/crypto.h
 bn_exp2.o: ../../include/openssl/e_os2.h ../../include/openssl/err.h

@@ -1,3 +1,4 @@
+'use strict';
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -19,10 +20,10 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var common = require('../common');
-var assert = require('assert');
-var cluster = require('cluster');
-var dgram = require('dgram');
+const common = require('../common');
+const assert = require('assert');
+const cluster = require('cluster');
+const dgram = require('dgram');
 
 // Without an explicit bind, send() causes an implicit bind, which always
 // generate a unique per-socket ephemeral port. An explicit bind to a port
@@ -38,55 +39,55 @@ var dgram = require('dgram');
 // supported while using cluster, though servers still cause the master to error
 // with ENOTSUP.
 
-var windows = process.platform === 'win32';
-
 if (cluster.isMaster) {
-  var pass;
-  var messages = 0;
-  var ports = {};
+  let messages = 0;
+  const ports = {};
+  const pids = [];
 
-  process.on('exit', function() {
-    assert.equal(pass, true);
+  const target = dgram.createSocket('udp4');
+
+  const done = common.mustCall(function() {
+    cluster.disconnect();
+    target.close();
   });
 
-  var target = dgram.createSocket('udp4');
-
   target.on('message', function(buf, rinfo) {
+    if (pids.includes(buf.toString()))
+      return;
+    pids.push(buf.toString());
     messages++;
     ports[rinfo.port] = true;
 
-    if (windows && messages === 2) {
-      assert.equal(Object.keys(ports).length, 2);
+    if (common.isWindows && messages === 2) {
+      assert.strictEqual(Object.keys(ports).length, 2);
       done();
     }
 
-    if (!windows && messages === 4) {
-      assert.equal(Object.keys(ports).length, 3);
+    if (!common.isWindows && messages === 4) {
+      assert.strictEqual(Object.keys(ports).length, 3);
       done();
-    }
-
-    function done() {
-      pass = true;
-      cluster.disconnect();
-      target.close();
     }
   });
 
   target.on('listening', function() {
-    cluster.fork();
-    cluster.fork();
-    if (!windows) {
-      cluster.fork({BOUND: 'y'});
-      cluster.fork({BOUND: 'y'});
+    cluster.fork({ PORT: target.address().port });
+    cluster.fork({ PORT: target.address().port });
+    if (!common.isWindows) {
+      cluster.fork({ BOUND: 'y', PORT: target.address().port });
+      cluster.fork({ BOUND: 'y', PORT: target.address().port });
     }
   });
 
-  target.bind({port: common.PORT, exclusive: true});
+  target.bind({ port: 0, exclusive: true });
 
   return;
 }
 
-var source = dgram.createSocket('udp4');
+const source = dgram.createSocket('udp4');
+
+source.on('close', function() {
+  clearInterval(interval);
+});
 
 if (process.env.BOUND === 'y') {
   source.bind(0);
@@ -97,4 +98,8 @@ if (process.env.BOUND === 'y') {
   source.unref();
 }
 
-source.send(Buffer('abc'), 0, 3, common.PORT, '127.0.0.1');
+assert(process.env.PORT);
+const buf = Buffer.from(process.pid.toString());
+const interval = setInterval(() => {
+  source.send(buf, process.env.PORT, '127.0.0.1');
+}, 1).unref();

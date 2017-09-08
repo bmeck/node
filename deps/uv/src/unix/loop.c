@@ -28,11 +28,15 @@
 #include <unistd.h>
 
 int uv_loop_init(uv_loop_t* loop) {
+  void* saved_data;
   int err;
 
   uv__signal_global_once_init();
 
+  saved_data = loop->data;
   memset(loop, 0, sizeof(*loop));
+  loop->data = saved_data;
+
   heap_init((struct heap*) &loop->timer_heap);
   QUEUE_INIT(&loop->wq);
   QUEUE_INIT(&loop->active_reqs);
@@ -50,7 +54,8 @@ int uv_loop_init(uv_loop_t* loop) {
 
   loop->closing_handles = NULL;
   uv__update_time(loop);
-  uv__async_init(&loop->async_watcher);
+  loop->async_io_watcher.fd = -1;
+  loop->async_wfd = -1;
   loop->signal_pipefd[0] = -1;
   loop->signal_pipefd[1] = -1;
   loop->backend_fd = -1;
@@ -63,22 +68,75 @@ int uv_loop_init(uv_loop_t* loop) {
   if (err)
     return err;
 
-  uv_signal_init(loop, &loop->child_watcher);
+  err = uv_signal_init(loop, &loop->child_watcher);
+  if (err)
+    goto fail_signal_init;
+
   uv__handle_unref(&loop->child_watcher);
   loop->child_watcher.flags |= UV__HANDLE_INTERNAL;
   QUEUE_INIT(&loop->process_handles);
 
-  if (uv_rwlock_init(&loop->cloexec_lock))
-    abort();
+  err = uv_rwlock_init(&loop->cloexec_lock);
+  if (err)
+    goto fail_rwlock_init;
 
-  if (uv_mutex_init(&loop->wq_mutex))
-    abort();
+  err = uv_mutex_init(&loop->wq_mutex);
+  if (err)
+    goto fail_mutex_init;
 
-  if (uv_async_init(loop, &loop->wq_async, uv__work_done))
-    abort();
+  err = uv_async_init(loop, &loop->wq_async, uv__work_done);
+  if (err)
+    goto fail_async_init;
 
   uv__handle_unref(&loop->wq_async);
   loop->wq_async.flags |= UV__HANDLE_INTERNAL;
+
+  return 0;
+
+fail_async_init:
+  uv_mutex_destroy(&loop->wq_mutex);
+
+fail_mutex_init:
+  uv_rwlock_destroy(&loop->cloexec_lock);
+
+fail_rwlock_init:
+  uv__signal_loop_cleanup(loop);
+
+fail_signal_init:
+  uv__platform_loop_delete(loop);
+
+  return err;
+}
+
+
+int uv_loop_fork(uv_loop_t* loop) {
+  int err;
+  unsigned int i;
+  uv__io_t* w;
+
+  err = uv__io_fork(loop);
+  if (err)
+    return err;
+
+  err = uv__async_fork(loop);
+  if (err)
+    return err;
+
+  err = uv__signal_loop_fork(loop);
+  if (err)
+    return err;
+
+  /* Rearm all the watchers that aren't re-queued by the above. */
+  for (i = 0; i < loop->nwatchers; i++) {
+    w = loop->watchers[i];
+    if (w == NULL)
+      continue;
+
+    if (w->pevents != 0 && QUEUE_EMPTY(&w->watcher_queue)) {
+      w->events = 0; /* Force re-registration in uv__io_poll. */
+      QUEUE_INSERT_TAIL(&loop->watcher_queue, &w->watcher_queue);
+    }
+  }
 
   return 0;
 }
@@ -87,7 +145,7 @@ int uv_loop_init(uv_loop_t* loop) {
 void uv__loop_close(uv_loop_t* loop) {
   uv__signal_loop_cleanup(loop);
   uv__platform_loop_delete(loop);
-  uv__async_stop(loop, &loop->async_watcher);
+  uv__async_stop(loop);
 
   if (loop->emfile_fd != -1) {
     uv__close(loop->emfile_fd);
@@ -117,7 +175,7 @@ void uv__loop_close(uv_loop_t* loop) {
   assert(loop->nfds == 0);
 #endif
 
-  free(loop->watchers);
+  uv__free(loop->watchers);
   loop->watchers = NULL;
   loop->nwatchers = 0;
 }

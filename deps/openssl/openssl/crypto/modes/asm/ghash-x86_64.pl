@@ -92,7 +92,7 @@ die "can't locate x86_64-xlate.pl";
 
 if (`$ENV{CC} -Wa,-v -c -o /dev/null -x assembler /dev/null 2>&1`
 		=~ /GNU assembler version ([2-9]\.[0-9]+)/) {
-	$avx = ($1>=2.19) + ($1>=2.22);
+	$avx = ($1>=2.20) + ($1>=2.22);
 }
 
 if (!$avx && $win64 && ($flavour =~ /nasm/ || $ENV{ASM} =~ /nasm/) &&
@@ -105,7 +105,7 @@ if (!$avx && $win64 && ($flavour =~ /masm/ || $ENV{ASM} =~ /ml64/) &&
 	$avx = ($1>=10) + ($1>=11);
 }
 
-if (!$avx && `$ENV{CC} -v 2>&1` =~ /(^clang version|based on LLVM) ([3-9]\.[0-9]+)/) {
+if (!$avx && `$ENV{CC} -v 2>&1` =~ /((?:^clang|LLVM) version|.*based on LLVM) ([3-9]\.[0-9]+)/) {
 	$avx = ($2>=3.0) + ($2>3.0);
 }
 
@@ -460,7 +460,7 @@ $code.=<<___;
 	psllq		\$57,$Xi		#
 	movdqa		$Xi,$T1			#
 	pslldq		\$8,$Xi
-	psrldq		\$8,$T1			#
+	psrldq		\$8,$T1			#	
 	pxor		$T2,$Xi
 	pxor		$T1,$Xhi		#
 
@@ -574,17 +574,17 @@ ___
 	&clmul64x64_T2	($Xhi,$Xi,$Hkey,$T2);
 $code.=<<___ if (0 || (&reduction_alg9($Xhi,$Xi)&&0));
 	# experimental alternative. special thing about is that there
-	# no dependency between the two multiplications...
+	# no dependency between the two multiplications... 
 	mov		\$`0xE1<<1`,%eax
-	mov		\$0xA040608020C0E000,%r10	# ((7..0)·0xE0)&0xff
+	mov		\$0xA040608020C0E000,%r10	# ((7..0)Â·0xE0)&0xff
 	mov		\$0x07,%r11d
 	movq		%rax,$T1
 	movq		%r10,$T2
 	movq		%r11,$T3		# borrow $T3
 	pand		$Xi,$T3
-	pshufb		$T3,$T2			# ($Xi&7)·0xE0
+	pshufb		$T3,$T2			# ($Xi&7)Â·0xE0
 	movq		%rax,$T3
-	pclmulqdq	\$0x00,$Xi,$T1		# ·(0xE1<<1)
+	pclmulqdq	\$0x00,$Xi,$T1		# Â·(0xE1<<1)
 	pxor		$Xi,$T2
 	pslldq		\$15,$T2
 	paddd		$T2,$T2			# <<(64+56+1)
@@ -657,7 +657,7 @@ $code.=<<___;
 	je		.Lskip4x
 
 	sub		\$0x30,$len
-	mov		\$0xA040608020C0E000,%rax	# ((7..0)·0xE0)&0xff
+	mov		\$0xA040608020C0E000,%rax	# ((7..0)Â·0xE0)&0xff
 	movdqu		0x30($Htbl),$Hkey3
 	movdqu		0x40($Htbl),$Hkey4
 
@@ -749,7 +749,7 @@ $code.=<<___;
 	movdqa		$T2,$T1			#
 	pslldq		\$8,$T2
 	 pclmulqdq	\$0x00,$Hkey2,$Xln
-	psrldq		\$8,$T1			#
+	psrldq		\$8,$T1			#	
 	pxor		$T2,$Xi
 	pxor		$T1,$Xhi		#
 	movdqu		0($inp),$T1
@@ -885,7 +885,7 @@ $code.=<<___;
 	  psllq		\$57,$Xi		#
 	  movdqa	$Xi,$T1			#
 	  pslldq	\$8,$Xi
-	  psrldq	\$8,$T1			#
+	  psrldq	\$8,$T1			#	
 	  pxor		$T2,$Xi
 	pshufd		\$0b01001110,$Xhn,$Xmn
 	  pxor		$T1,$Xhi		#

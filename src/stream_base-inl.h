@@ -1,6 +1,8 @@
 #ifndef SRC_STREAM_BASE_INL_H_
 #define SRC_STREAM_BASE_INL_H_
 
+#if defined(NODE_WANT_INTERNALS) && NODE_WANT_INTERNALS
+
 #include "stream_base.h"
 
 #include "node.h"
@@ -10,9 +12,9 @@
 
 namespace node {
 
+using v8::External;
 using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
-using v8::Handle;
 using v8::HandleScope;
 using v8::Local;
 using v8::Object;
@@ -21,9 +23,11 @@ using v8::PropertyCallbackInfo;
 using v8::String;
 using v8::Value;
 
+using AsyncHooks = Environment::AsyncHooks;
+
 template <class Base>
 void StreamBase::AddMethods(Environment* env,
-                            Handle<FunctionTemplate> t,
+                            Local<FunctionTemplate> t,
                             int flags) {
   HandleScope scope(env->isolate());
 
@@ -31,6 +35,20 @@ void StreamBase::AddMethods(Environment* env,
       static_cast<PropertyAttribute>(v8::ReadOnly | v8::DontDelete);
   t->InstanceTemplate()->SetAccessor(env->fd_string(),
                                      GetFD<Base>,
+                                     nullptr,
+                                     env->as_external(),
+                                     v8::DEFAULT,
+                                     attributes);
+
+  t->InstanceTemplate()->SetAccessor(env->external_stream_string(),
+                                     GetExternal<Base>,
+                                     nullptr,
+                                     env->as_external(),
+                                     v8::DEFAULT,
+                                     attributes);
+
+  t->InstanceTemplate()->SetAccessor(env->bytes_read_string(),
+                                     GetBytesRead<Base>,
                                      nullptr,
                                      env->as_external(),
                                      v8::DEFAULT,
@@ -55,16 +73,22 @@ void StreamBase::AddMethods(Environment* env,
                       "writeUcs2String",
                       JSMethod<Base, &StreamBase::WriteString<UCS2> >);
   env->SetProtoMethod(t,
-                      "writeBinaryString",
-                      JSMethod<Base, &StreamBase::WriteString<BINARY> >);
+                      "writeLatin1String",
+                      JSMethod<Base, &StreamBase::WriteString<LATIN1> >);
 }
 
 
 template <class Base>
 void StreamBase::GetFD(Local<String> key,
                        const PropertyCallbackInfo<Value>& args) {
-  StreamBase* wrap = Unwrap<Base>(args.Holder());
+  Base* handle = Unwrap<Base>(args.Holder());
 
+  // Mimic implementation of StreamBase::GetFD() and UDPWrap::GetFD().
+  ASSIGN_OR_RETURN_UNWRAP(&handle,
+                          args.Holder(),
+                          args.GetReturnValue().Set(UV_EINVAL));
+
+  StreamBase* wrap = static_cast<StreamBase*>(handle);
   if (!wrap->IsAlive())
     return args.GetReturnValue().Set(UV_EINVAL);
 
@@ -72,14 +96,47 @@ void StreamBase::GetFD(Local<String> key,
 }
 
 
+template <class Base>
+void StreamBase::GetBytesRead(Local<String> key,
+                              const PropertyCallbackInfo<Value>& args) {
+  Base* handle = Unwrap<Base>(args.Holder());
+
+  // The handle instance hasn't been set. So no bytes could have been read.
+  ASSIGN_OR_RETURN_UNWRAP(&handle,
+                          args.Holder(),
+                          args.GetReturnValue().Set(0));
+
+  StreamBase* wrap = static_cast<StreamBase*>(handle);
+  // uint64_t -> double. 53bits is enough for all real cases.
+  args.GetReturnValue().Set(static_cast<double>(wrap->bytes_read_));
+}
+
+
+template <class Base>
+void StreamBase::GetExternal(Local<String> key,
+                             const PropertyCallbackInfo<Value>& args) {
+  Base* handle = Unwrap<Base>(args.Holder());
+
+  ASSIGN_OR_RETURN_UNWRAP(&handle, args.Holder());
+
+  StreamBase* wrap = static_cast<StreamBase*>(handle);
+  Local<External> ext = External::New(args.GetIsolate(), wrap);
+  args.GetReturnValue().Set(ext);
+}
+
+
 template <class Base,
           int (StreamBase::*Method)(const FunctionCallbackInfo<Value>& args)>
 void StreamBase::JSMethod(const FunctionCallbackInfo<Value>& args) {
-  StreamBase* wrap = Unwrap<Base>(args.Holder());
+  Base* handle = Unwrap<Base>(args.Holder());
 
+  ASSIGN_OR_RETURN_UNWRAP(&handle, args.Holder());
+
+  StreamBase* wrap = static_cast<StreamBase*>(handle);
   if (!wrap->IsAlive())
     return args.GetReturnValue().Set(UV_EINVAL);
 
+  AsyncHooks::InitScope init_scope(handle->env(), handle->get_id());
   args.GetReturnValue().Set((wrap->*Method)(args));
 }
 
@@ -92,7 +149,7 @@ WriteWrap* WriteWrap::New(Environment* env,
   size_t storage_size = ROUND_UP(sizeof(WriteWrap), kAlignSize) + extra;
   char* storage = new char[storage_size];
 
-  return new(storage) WriteWrap(env, obj, wrap, cb);
+  return new(storage) WriteWrap(env, obj, wrap, cb, storage_size);
 }
 
 
@@ -109,5 +166,7 @@ char* WriteWrap::Extra(size_t offset) {
 }
 
 }  // namespace node
+
+#endif  // defined(NODE_WANT_INTERNALS) && NODE_WANT_INTERNALS
 
 #endif  // SRC_STREAM_BASE_INL_H_

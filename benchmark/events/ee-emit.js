@@ -1,7 +1,8 @@
+'use strict';
 var common = require('../common.js');
 var EventEmitter = require('events').EventEmitter;
 
-var bench = common.createBenchmark(main, {n: [2e6]});
+var bench = common.createBenchmark(main, { n: [2e6] });
 
 function main(conf) {
   var n = conf.n | 0;

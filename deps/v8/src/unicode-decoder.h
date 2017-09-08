@@ -7,10 +7,11 @@
 
 #include <sys/types.h>
 #include "src/globals.h"
+#include "src/utils.h"
 
 namespace unibrow {
 
-class Utf8DecoderBase {
+class V8_EXPORT_PRIVATE Utf8DecoderBase {
  public:
   // Initialization done in subclass.
   inline Utf8DecoderBase();
@@ -23,9 +24,10 @@ class Utf8DecoderBase {
   // The first buffer_length utf16 chars are cached in the buffer.
   void Reset(uint16_t* buffer, size_t buffer_length, const uint8_t* stream,
              size_t stream_length);
-  static void WriteUtf16Slow(const uint8_t* stream, uint16_t* data,
-                             size_t length);
+  static void WriteUtf16Slow(const uint8_t* stream, size_t stream_length,
+                             uint16_t* data, size_t length);
   const uint8_t* unbuffered_start_;
+  size_t unbuffered_length_;
   size_t utf16_length_;
   bool last_byte_of_buffer_unused_;
 
@@ -48,6 +50,7 @@ class Utf8Decoder : public Utf8DecoderBase {
 
 Utf8DecoderBase::Utf8DecoderBase()
     : unbuffered_start_(NULL),
+      unbuffered_length_(0),
       utf16_length_(0),
       last_byte_of_buffer_unused_(false) {}
 
@@ -84,7 +87,7 @@ size_t Utf8Decoder<kBufferSize>::WriteUtf16(uint16_t* data,
   if (length <= buffer_length) return length;
   DCHECK(unbuffered_start_ != NULL);
   // Copy the rest the slow way.
-  WriteUtf16Slow(unbuffered_start_, data + buffer_length,
+  WriteUtf16Slow(unbuffered_start_, unbuffered_length_, data + buffer_length,
                  length - buffer_length);
   return length;
 }

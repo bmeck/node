@@ -40,7 +40,7 @@
 extern char **environ;
 #endif
 
-#ifdef __linux__
+#if defined(__linux__) || defined(__GLIBC__)
 # include <grp.h>
 #endif
 
@@ -226,13 +226,14 @@ static int uv__process_open_stream(uv_stdio_container_t* container,
                                    int pipefds[2],
                                    int writable) {
   int flags;
+  int err;
 
   if (!(container->flags & UV_CREATE_PIPE) || pipefds[0] < 0)
     return 0;
 
-  if (uv__close(pipefds[1]))
-    if (errno != EINTR && errno != EINPROGRESS)
-      abort();
+  err = uv__close(pipefds[1]);
+  if (err != 0)
+    abort();
 
   pipefds[1] = -1;
   uv__nonblock(pipefds[0], 1);
@@ -269,13 +270,21 @@ static void uv__write_int(int fd, int val) {
 }
 
 
+#if !(defined(__APPLE__) && (TARGET_OS_TV || TARGET_OS_WATCH))
+/* execvp is marked __WATCHOS_PROHIBITED __TVOS_PROHIBITED, so must be
+ * avoided. Since this isn't called on those targets, the function
+ * doesn't even need to be defined for them.
+ */
 static void uv__process_child_init(const uv_process_options_t* options,
                                    int stdio_count,
                                    int (*pipes)[2],
                                    int error_fd) {
+  sigset_t set;
   int close_fd;
   int use_fd;
+  int err;
   int fd;
+  int n;
 
   if (options->flags & UV_PROCESS_DETACHED)
     setsid();
@@ -317,7 +326,7 @@ static void uv__process_child_init(const uv_process_options_t* options,
     }
 
     if (fd == use_fd)
-      uv__cloexec(use_fd, 0);
+      uv__cloexec_fcntl(use_fd, 0);
     else
       fd = dup2(use_fd, fd);
 
@@ -327,7 +336,7 @@ static void uv__process_child_init(const uv_process_options_t* options,
     }
 
     if (fd <= 2)
-      uv__nonblock(fd, 0);
+      uv__nonblock_fcntl(fd, 0);
 
     if (close_fd >= stdio_count)
       uv__close(close_fd);
@@ -370,15 +379,45 @@ static void uv__process_child_init(const uv_process_options_t* options,
     environ = options->env;
   }
 
+  /* Reset signal disposition.  Use a hard-coded limit because NSIG
+   * is not fixed on Linux: it's either 32, 34 or 64, depending on
+   * whether RT signals are enabled.  We are not allowed to touch
+   * RT signal handlers, glibc uses them internally.
+   */
+  for (n = 1; n < 32; n += 1) {
+    if (n == SIGKILL || n == SIGSTOP)
+      continue;  /* Can't be changed. */
+
+    if (SIG_ERR != signal(n, SIG_DFL))
+      continue;
+
+    uv__write_int(error_fd, -errno);
+    _exit(127);
+  }
+
+  /* Reset signal mask. */
+  sigemptyset(&set);
+  err = pthread_sigmask(SIG_SETMASK, &set, NULL);
+
+  if (err != 0) {
+    uv__write_int(error_fd, -err);
+    _exit(127);
+  }
+
   execvp(options->file, options->args);
   uv__write_int(error_fd, -errno);
   _exit(127);
 }
+#endif
 
 
 int uv_spawn(uv_loop_t* loop,
              uv_process_t* process,
              const uv_process_options_t* options) {
+#if defined(__APPLE__) && (TARGET_OS_TV || TARGET_OS_WATCH)
+  /* fork is marked __WATCHOS_PROHIBITED __TVOS_PROHIBITED. */
+  return -ENOSYS;
+#else
   int signal_pipe[2] = { -1, -1 };
   int (*pipes)[2];
   int stdio_count;
@@ -404,7 +443,7 @@ int uv_spawn(uv_loop_t* loop,
     stdio_count = 3;
 
   err = -ENOMEM;
-  pipes = malloc(stdio_count * sizeof(*pipes));
+  pipes = uv__malloc(stdio_count * sizeof(*pipes));
   if (pipes == NULL)
     goto error;
 
@@ -487,7 +526,7 @@ int uv_spawn(uv_loop_t* loop,
   } else
     abort();
 
-  uv__close(signal_pipe[0]);
+  uv__close_nocheckstdio(signal_pipe[0]);
 
   for (i = 0; i < options->stdio_count; i++) {
     err = uv__process_open_stream(options->stdio + i, pipes[i], i == 0);
@@ -509,7 +548,7 @@ int uv_spawn(uv_loop_t* loop,
   process->pid = pid;
   process->exit_cb = options->exit_cb;
 
-  free(pipes);
+  uv__free(pipes);
   return exec_errorno;
 
 error:
@@ -519,14 +558,15 @@ error:
         if (options->stdio[i].flags & (UV_INHERIT_FD | UV_INHERIT_STREAM))
           continue;
       if (pipes[i][0] != -1)
-        close(pipes[i][0]);
+        uv__close_nocheckstdio(pipes[i][0]);
       if (pipes[i][1] != -1)
-        close(pipes[i][1]);
+        uv__close_nocheckstdio(pipes[i][1]);
     }
-    free(pipes);
+    uv__free(pipes);
   }
 
   return err;
+#endif
 }
 
 

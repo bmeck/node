@@ -22,20 +22,17 @@ namespace v8 {
 namespace internal {
 
 // When running without a simulator we call the entry directly.
-#define CALL_GENERATED_CODE(entry, p0, p1, p2, p3, p4) \
+#define CALL_GENERATED_CODE(isolate, entry, p0, p1, p2, p3, p4) \
   (entry(p0, p1, p2, p3, p4))
 
 typedef int (*ppc_regexp_matcher)(String*, int, const byte*, const byte*, int*,
-                                  int, Address, int, void*, Isolate*);
-
+                                  int, Address, int, Isolate*);
 
 // Call the generated regexp code directly. The code at the entry address
 // should act as a function matching the type ppc_regexp_matcher.
-// The ninth argument is a dummy that reserves the space used for
-// the return address added by the ExitFrame in native calls.
-#define CALL_GENERATED_REGEXP_CODE(entry, p0, p1, p2, p3, p4, p5, p6, p7, p8) \
-  (FUNCTION_CAST<ppc_regexp_matcher>(entry)(p0, p1, p2, p3, p4, p5, p6, p7,   \
-                                            NULL, p8))
+#define CALL_GENERATED_REGEXP_CODE(isolate, entry, p0, p1, p2, p3, p4, p5, p6, \
+                                   p7, p8)                                     \
+  (FUNCTION_CAST<ppc_regexp_matcher>(entry)(p0, p1, p2, p3, p4, p5, p6, p7, p8))
 
 // The stack limit beyond which we will throw stack overflow errors in
 // generated code. Because generated code on ppc uses the C stack, we
@@ -48,20 +45,24 @@ class SimulatorStack : public v8::internal::AllStatic {
     return c_limit;
   }
 
-  static inline uintptr_t RegisterCTryCatch(uintptr_t try_catch_address) {
+  static inline uintptr_t RegisterCTryCatch(v8::internal::Isolate* isolate,
+                                            uintptr_t try_catch_address) {
+    USE(isolate);
     return try_catch_address;
   }
 
-  static inline void UnregisterCTryCatch() {}
+  static inline void UnregisterCTryCatch(v8::internal::Isolate* isolate) {
+    USE(isolate);
+  }
 };
-}
-}  // namespace v8::internal
+}  // namespace internal
+}  // namespace v8
 
 #else  // !defined(USE_SIMULATOR)
 // Running with a simulator.
 
 #include "src/assembler.h"
-#include "src/hashmap.h"
+#include "src/base/hashmap.h"
 #include "src/ppc/constants-ppc.h"
 
 namespace v8 {
@@ -199,18 +200,20 @@ class Simulator {
   void set_pc(intptr_t value);
   intptr_t get_pc() const;
 
-  Address get_sp() {
+  Address get_sp() const {
     return reinterpret_cast<Address>(static_cast<intptr_t>(get_register(sp)));
   }
 
   // Accessor to the internal simulator stack area.
-  uintptr_t StackLimit() const;
+  uintptr_t StackLimit(uintptr_t c_limit) const;
 
   // Executes PPC instructions until the PC reaches end_sim_pc.
   void Execute();
 
   // Call on program start.
   static void Initialize(Isolate* isolate);
+
+  static void TearDown(base::CustomMatcherHashMap* i_cache, Redirection* first);
 
   // V8 generally calls into generated JS code with 5 parameters and into
   // generated RegExp code with 7 parameters. This is a convenience function,
@@ -232,7 +235,7 @@ class Simulator {
   char* last_debugger_input() { return last_debugger_input_; }
 
   // ICache checking.
-  static void FlushICache(v8::internal::HashMap* i_cache, void* start,
+  static void FlushICache(base::CustomMatcherHashMap* i_cache, void* start,
                           size_t size);
 
   // Returns true if pc register contains one of the 'special_values' defined
@@ -250,6 +253,8 @@ class Simulator {
     // C code.
     end_sim_pc = -2
   };
+
+  enum BCType { BC_OFFSET, BC_LINK_REG, BC_CTR_REG };
 
   // Unsupported instructions use Format to print an error and stop execution.
   void Format(Instruction* instr, const char* format);
@@ -280,19 +285,25 @@ class Simulator {
 
   // Read and write memory.
   inline uint8_t ReadBU(intptr_t addr);
+  inline uint8_t ReadExBU(intptr_t addr);
   inline int8_t ReadB(intptr_t addr);
   inline void WriteB(intptr_t addr, uint8_t value);
+  inline int WriteExB(intptr_t addr, uint8_t value);
   inline void WriteB(intptr_t addr, int8_t value);
 
   inline uint16_t ReadHU(intptr_t addr, Instruction* instr);
+  inline uint16_t ReadExHU(intptr_t addr, Instruction* instr);
   inline int16_t ReadH(intptr_t addr, Instruction* instr);
   // Note: Overloaded on the sign of the value.
   inline void WriteH(intptr_t addr, uint16_t value, Instruction* instr);
+  inline int WriteExH(intptr_t addr, uint16_t value, Instruction* instr);
   inline void WriteH(intptr_t addr, int16_t value, Instruction* instr);
 
   inline uint32_t ReadWU(intptr_t addr, Instruction* instr);
+  inline uint32_t ReadExWU(intptr_t addr, Instruction* instr);
   inline int32_t ReadW(intptr_t addr, Instruction* instr);
   inline void WriteW(intptr_t addr, uint32_t value, Instruction* instr);
+  inline int WriteExW(intptr_t addr, uint32_t value, Instruction* instr);
   inline void WriteW(intptr_t addr, int32_t value, Instruction* instr);
 
   intptr_t* ReadDW(intptr_t addr);
@@ -300,31 +311,40 @@ class Simulator {
 
   void Trace(Instruction* instr);
   void SetCR0(intptr_t result, bool setSO = false);
-  void ExecuteBranchConditional(Instruction* instr);
+  void ExecuteBranchConditional(Instruction* instr, BCType type);
   void ExecuteExt1(Instruction* instr);
-  bool ExecuteExt2_10bit(Instruction* instr);
+  bool ExecuteExt2_10bit_part1(Instruction* instr);
+  bool ExecuteExt2_10bit_part2(Instruction* instr);
   bool ExecuteExt2_9bit_part1(Instruction* instr);
   bool ExecuteExt2_9bit_part2(Instruction* instr);
   void ExecuteExt2_5bit(Instruction* instr);
   void ExecuteExt2(Instruction* instr);
+  void ExecuteExt3(Instruction* instr);
   void ExecuteExt4(Instruction* instr);
 #if V8_TARGET_ARCH_PPC64
   void ExecuteExt5(Instruction* instr);
 #endif
+  void ExecuteExt6(Instruction* instr);
   void ExecuteGeneric(Instruction* instr);
+
+  void SetFPSCR(int bit) { fp_condition_reg_ |= (1 << (31 - bit)); }
+  void ClearFPSCR(int bit) { fp_condition_reg_ &= ~(1 << (31 - bit)); }
 
   // Executes one instruction.
   void ExecuteInstruction(Instruction* instr);
 
   // ICache.
-  static void CheckICache(v8::internal::HashMap* i_cache, Instruction* instr);
-  static void FlushOnePage(v8::internal::HashMap* i_cache, intptr_t start,
+  static void CheckICache(base::CustomMatcherHashMap* i_cache,
+                          Instruction* instr);
+  static void FlushOnePage(base::CustomMatcherHashMap* i_cache, intptr_t start,
                            int size);
-  static CachePage* GetCachePage(v8::internal::HashMap* i_cache, void* page);
+  static CachePage* GetCachePage(base::CustomMatcherHashMap* i_cache,
+                                 void* page);
 
-  // Runtime call support.
+  // Runtime call support. Uses the isolate in a thread-safe way.
   static void* RedirectExternalReference(
-      void* external_function, v8::internal::ExternalReference::Type type);
+      Isolate* isolate, void* external_function,
+      v8::internal::ExternalReference::Type type);
 
   // Handle arguments and return value for runtime FP functions.
   void GetFpArgs(double* x, double* y, intptr_t* z);
@@ -349,6 +369,7 @@ class Simulator {
 
   // Simulator support.
   char* stack_;
+  static const size_t stack_protection_size_ = 256 * kPointerSize;
   bool pc_modified_;
   int icount_;
 
@@ -356,7 +377,7 @@ class Simulator {
   char* last_debugger_input_;
 
   // Icache simulation
-  v8::internal::HashMap* i_cache_;
+  base::CustomMatcherHashMap* i_cache_;
 
   // Registered breakpoints.
   Instruction* break_pc_;
@@ -380,46 +401,123 @@ class Simulator {
     char* desc;
   };
   StopCountAndDesc watched_stops_[kNumOfWatchedStops];
+
+  // Syncronization primitives. See ARM DDI 0406C.b, A2.9.
+  enum class MonitorAccess {
+    Open,
+    Exclusive,
+  };
+
+  enum class TransactionSize {
+    None = 0,
+    Byte = 1,
+    HalfWord = 2,
+    Word = 4,
+  };
+
+  class LocalMonitor {
+   public:
+    LocalMonitor();
+
+    // These functions manage the state machine for the local monitor, but do
+    // not actually perform loads and stores. NotifyStoreExcl only returns
+    // true if the exclusive store is allowed; the global monitor will still
+    // have to be checked to see whether the memory should be updated.
+    void NotifyLoad(int32_t addr);
+    void NotifyLoadExcl(int32_t addr, TransactionSize size);
+    void NotifyStore(int32_t addr);
+    bool NotifyStoreExcl(int32_t addr, TransactionSize size);
+
+   private:
+    void Clear();
+
+    MonitorAccess access_state_;
+    int32_t tagged_addr_;
+    TransactionSize size_;
+  };
+
+  class GlobalMonitor {
+   public:
+    GlobalMonitor();
+
+    class Processor {
+     public:
+      Processor();
+
+     private:
+      friend class GlobalMonitor;
+      // These functions manage the state machine for the global monitor, but do
+      // not actually perform loads and stores.
+      void Clear_Locked();
+      void NotifyLoadExcl_Locked(int32_t addr);
+      void NotifyStore_Locked(int32_t addr, bool is_requesting_processor);
+      bool NotifyStoreExcl_Locked(int32_t addr, bool is_requesting_processor);
+
+      MonitorAccess access_state_;
+      int32_t tagged_addr_;
+      Processor* next_;
+      Processor* prev_;
+    };
+
+    // Exposed so it can be accessed by Simulator::{Read,Write}Ex*.
+    base::Mutex mutex;
+
+    void NotifyLoadExcl_Locked(int32_t addr, Processor* processor);
+    void NotifyStore_Locked(int32_t addr, Processor* processor);
+    bool NotifyStoreExcl_Locked(int32_t addr, Processor* processor);
+
+    // Called when the simulator is destroyed.
+    void RemoveProcessor(Processor* processor);
+
+   private:
+    bool IsProcessorInLinkedList_Locked(Processor* processor) const;
+    void PrependProcessor_Locked(Processor* processor);
+
+    Processor* head_;
+  };
+
+  LocalMonitor local_monitor_;
+  GlobalMonitor::Processor global_monitor_processor_;
+  static base::LazyInstance<GlobalMonitor>::type global_monitor_;
 };
 
 
 // When running with the simulator transition into simulated execution at this
 // point.
-#define CALL_GENERATED_CODE(entry, p0, p1, p2, p3, p4)                    \
-  reinterpret_cast<Object*>(Simulator::current(Isolate::Current())->Call( \
-      FUNCTION_ADDR(entry), 5, (intptr_t)p0, (intptr_t)p1, (intptr_t)p2,  \
+#define CALL_GENERATED_CODE(isolate, entry, p0, p1, p2, p3, p4)          \
+  reinterpret_cast<Object*>(Simulator::current(isolate)->Call(           \
+      FUNCTION_ADDR(entry), 5, (intptr_t)p0, (intptr_t)p1, (intptr_t)p2, \
       (intptr_t)p3, (intptr_t)p4))
 
-#define CALL_GENERATED_REGEXP_CODE(entry, p0, p1, p2, p3, p4, p5, p6, p7, p8) \
-  Simulator::current(Isolate::Current())                                      \
-      ->Call(entry, 10, (intptr_t)p0, (intptr_t)p1, (intptr_t)p2,             \
-             (intptr_t)p3, (intptr_t)p4, (intptr_t)p5, (intptr_t)p6,          \
-             (intptr_t)p7, (intptr_t)NULL, (intptr_t)p8)
-
+#define CALL_GENERATED_REGEXP_CODE(isolate, entry, p0, p1, p2, p3, p4, p5, p6, \
+                                   p7, p8)                                     \
+  Simulator::current(isolate)->Call(                                           \
+      entry, 9, (intptr_t)p0, (intptr_t)p1, (intptr_t)p2, (intptr_t)p3,        \
+      (intptr_t)p4, (intptr_t)p5, (intptr_t)p6, (intptr_t)p7, (intptr_t)p8)
 
 // The simulator has its own stack. Thus it has a different stack limit from
-// the C-based native code.  Setting the c_limit to indicate a very small
-// stack cause stack overflow errors, since the simulator ignores the input.
-// This is unlikely to be an issue in practice, though it might cause testing
-// trouble down the line.
+// the C-based native code.  The JS-based limit normally points near the end of
+// the simulator stack.  When the C-based limit is exhausted we reflect that by
+// lowering the JS-based limit as well, to make stack checks trigger.
 class SimulatorStack : public v8::internal::AllStatic {
  public:
   static inline uintptr_t JsLimitFromCLimit(v8::internal::Isolate* isolate,
                                             uintptr_t c_limit) {
-    return Simulator::current(isolate)->StackLimit();
+    return Simulator::current(isolate)->StackLimit(c_limit);
   }
 
-  static inline uintptr_t RegisterCTryCatch(uintptr_t try_catch_address) {
-    Simulator* sim = Simulator::current(Isolate::Current());
+  static inline uintptr_t RegisterCTryCatch(v8::internal::Isolate* isolate,
+                                            uintptr_t try_catch_address) {
+    Simulator* sim = Simulator::current(isolate);
     return sim->PushAddress(try_catch_address);
   }
 
-  static inline void UnregisterCTryCatch() {
-    Simulator::current(Isolate::Current())->PopAddress();
+  static inline void UnregisterCTryCatch(v8::internal::Isolate* isolate) {
+    Simulator::current(isolate)->PopAddress();
   }
 };
-}
-}  // namespace v8::internal
+}  // namespace internal
+}  // namespace v8
 
 #endif  // !defined(USE_SIMULATOR)
 #endif  // V8_PPC_SIMULATOR_PPC_H_

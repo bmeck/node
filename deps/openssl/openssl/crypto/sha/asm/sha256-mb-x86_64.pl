@@ -28,7 +28,7 @@
 # (iii)	"this" is for n=8, when we gather twice as much data, result
 #	for n=4 is 20.3+4.44=24.7;
 # (iv)	presented improvement coefficients are asymptotic limits and
-#	in real-life application are somewhat lower, e.g. for 2KB
+#	in real-life application are somewhat lower, e.g. for 2KB 
 #	fragments they range from 75% to 130% (on Haswell);
 
 $flavour = shift;
@@ -59,7 +59,7 @@ if (!$avx && $win64 && ($flavour =~ /masm/ || $ENV{ASM} =~ /ml64/) &&
 	$avx = ($1>=10) + ($1>=11);
 }
 
-if (!$avx && `$ENV{CC} -v 2>&1` =~ /(^clang version|based on LLVM) ([3-9]\.[0-9]+)/) {
+if (!$avx && `$ENV{CC} -v 2>&1` =~ /((?:^clang|LLVM) version|.*based on LLVM) ([3-9]\.[0-9]+)/) {
 	$avx = ($2>=3.0) + ($2>3.0);
 }
 
@@ -1528,7 +1528,7 @@ sub sha256op38 {
     my $instr = shift;
     my %opcodelet = (
 		"sha256rnds2" => 0xcb,
-		"sha256msg1"  => 0xcc,
+  		"sha256msg1"  => 0xcc,
 		"sha256msg2"  => 0xcd	);
 
     if (defined($opcodelet{$instr}) && @_[0] =~ /%xmm([0-9]+),\s*%xmm([0-9]+)/) {

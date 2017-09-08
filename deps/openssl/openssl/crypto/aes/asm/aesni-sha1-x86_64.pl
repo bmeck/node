@@ -94,7 +94,7 @@ $avx=1 if (!$avx && $win64 && ($flavour =~ /nasm/ || $ENV{ASM} =~ /nasm/) &&
 $avx=1 if (!$avx && $win64 && ($flavour =~ /masm/ || $ENV{ASM} =~ /ml64/) &&
 	   `ml64 2>&1` =~ /Version ([0-9]+)\./ &&
 	   $1>=10);
-$avx=1 if (!$avx && `$ENV{CC} -v 2>&1` =~ /(^clang version|based on LLVM) ([3-9]\.[0-9]+)/ && $2>=3.0);
+$avx=1 if (!$avx && `$ENV{CC} -v 2>&1` =~ /((?:^clang|LLVM) version|.*based on LLVM) ([3-9]\.[0-9]+)/ && $2>=3.0);
 
 $shaext=1;	### set to zero if compiling for 1.0.1
 
@@ -784,7 +784,7 @@ sub body_00_19_dec () {	# ((c^d)&b)^d
 sub body_20_39_dec () {	# b^d^c
     # on entry @T[0]=b^d
     return &body_40_59_dec() if ($rx==39);
-
+  
     my @r=@body_20_39;
 
 	unshift (@r,@aes256_dec[$rx])	if (@aes256_dec[$rx]);
@@ -1702,6 +1702,7 @@ $code.=<<___;
 	mov	240($key),$rounds
 	sub	$in0,$out
 	movups	($key),$rndkey0			# $key[0]
+	movups	($ivp),$iv			# load IV
 	movups	16($key),$rndkey[0]		# forward reference
 	lea	112($key),$key			# size optimization
 
@@ -2013,7 +2014,7 @@ sub sha1op38 {
     my $instr = shift;
     my %opcodelet = (
 		"sha1nexte" => 0xc8,
-		"sha1msg1"  => 0xc9,
+  		"sha1msg1"  => 0xc9,
 		"sha1msg2"  => 0xca	);
 
     if (defined($opcodelet{$instr}) && @_[0] =~ /%xmm([0-9]+),\s*%xmm([0-9]+)/) {

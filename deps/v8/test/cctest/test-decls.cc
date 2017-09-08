@@ -29,11 +29,13 @@
 
 #include "src/v8.h"
 
+#include "src/heap/heap-inl.h"
 #include "src/heap/heap.h"
 #include "test/cctest/cctest.h"
 
 using namespace v8;
 
+namespace {
 
 enum Expectations {
   EXPECT_RESULT,
@@ -60,25 +62,24 @@ class DeclarationContext {
     }
   }
 
-  void Check(const char* source,
-             int get, int set, int has,
+  void Check(const char* source, int get, int set, int has,
              Expectations expectations,
-             v8::Handle<Value> value = Local<Value>());
+             v8::Local<Value> value = Local<Value>());
 
   int get_count() const { return get_count_; }
   int set_count() const { return set_count_; }
   int query_count() const { return query_count_; }
 
  protected:
-  virtual v8::Handle<Value> Get(Local<Name> key);
-  virtual v8::Handle<Value> Set(Local<Name> key, Local<Value> value);
-  virtual v8::Handle<Integer> Query(Local<Name> key);
+  virtual v8::Local<Value> Get(Local<Name> key);
+  virtual v8::Local<Value> Set(Local<Name> key, Local<Value> value);
+  virtual v8::Local<Integer> Query(Local<Name> key);
 
   void InitializeIfNeeded();
 
   // Perform optional initialization steps on the context after it has
   // been created. Defaults to none but may be overwritten.
-  virtual void PostInitializeContext(Handle<Context> context) {}
+  virtual void PostInitializeContext(Local<Context> context) {}
 
   // Get the holder for the interceptor. Default to the instance template
   // but may be overwritten.
@@ -130,46 +131,52 @@ void DeclarationContext::InitializeIfNeeded() {
   context_.Reset(isolate, context);
   context->Enter();
   is_initialized_ = true;
+  // Reset counts. Bootstrapping might have called into the interceptor.
+  get_count_ = 0;
+  set_count_ = 0;
+  query_count_ = 0;
   PostInitializeContext(context);
 }
 
 
-void DeclarationContext::Check(const char* source,
-                               int get, int set, int query,
+void DeclarationContext::Check(const char* source, int get, int set, int query,
                                Expectations expectations,
-                               v8::Handle<Value> value) {
+                               v8::Local<Value> value) {
   InitializeIfNeeded();
   // A retry after a GC may pollute the counts, so perform gc now
   // to avoid that.
-  CcTest::heap()->CollectGarbage(v8::internal::NEW_SPACE);
+  CcTest::CollectGarbage(v8::internal::NEW_SPACE);
   HandleScope scope(CcTest::isolate());
-  TryCatch catcher;
+  TryCatch catcher(CcTest::isolate());
   catcher.SetVerbose(true);
-  Local<Script> script =
-      Script::Compile(String::NewFromUtf8(CcTest::isolate(), source));
+  Local<Context> context = CcTest::isolate()->GetCurrentContext();
+  MaybeLocal<Script> script = Script::Compile(
+      context,
+      String::NewFromUtf8(CcTest::isolate(), source, v8::NewStringType::kNormal)
+          .ToLocalChecked());
   if (expectations == EXPECT_ERROR) {
     CHECK(script.IsEmpty());
     return;
   }
   CHECK(!script.IsEmpty());
-  Local<Value> result = script->Run();
+  MaybeLocal<Value> result = script.ToLocalChecked()->Run(context);
   CHECK_EQ(get, get_count());
   CHECK_EQ(set, set_count());
   CHECK_EQ(query, query_count());
   if (expectations == EXPECT_RESULT) {
     CHECK(!catcher.HasCaught());
     if (!value.IsEmpty()) {
-      CHECK(value->Equals(result));
+      CHECK(value->Equals(context, result.ToLocalChecked()).FromJust());
     }
   } else {
     CHECK(expectations == EXPECT_EXCEPTION);
     CHECK(catcher.HasCaught());
     if (!value.IsEmpty()) {
-      CHECK(value->Equals(catcher.Exception()));
+      CHECK(value->Equals(context, catcher.Exception()).FromJust());
     }
   }
   // Clean slate for the next test.
-  CcTest::heap()->CollectAllAvailableGarbage();
+  CcTest::CollectAllAvailableGarbage();
 }
 
 
@@ -204,20 +211,21 @@ DeclarationContext* DeclarationContext::GetInstance(Local<Value> data) {
 }
 
 
-v8::Handle<Value> DeclarationContext::Get(Local<Name> key) {
-  return v8::Handle<Value>();
+v8::Local<Value> DeclarationContext::Get(Local<Name> key) {
+  return v8::Local<Value>();
 }
 
 
-v8::Handle<Value> DeclarationContext::Set(Local<Name> key, Local<Value> value) {
-  return v8::Handle<Value>();
+v8::Local<Value> DeclarationContext::Set(Local<Name> key, Local<Value> value) {
+  return v8::Local<Value>();
 }
 
 
-v8::Handle<Integer> DeclarationContext::Query(Local<Name> key) {
-  return v8::Handle<Integer>();
+v8::Local<Integer> DeclarationContext::Query(Local<Name> key) {
+  return v8::Local<Integer>();
 }
 
+}  // namespace
 
 // Test global declaration of a property the interceptor doesn't know
 // about and doesn't handle.
@@ -241,31 +249,15 @@ TEST(Unknown) {
   { DeclarationContext context;
     context.Check("function x() { }; x",
                   1,  // access
-                  0,
-                  0,
-                  EXPECT_RESULT);
-  }
-
-  { DeclarationContext context;
-    context.Check("const x; x",
-                  1,  // access
-                  0, 0, EXPECT_RESULT, Undefined(CcTest::isolate()));
-  }
-
-  { DeclarationContext context;
-    context.Check("const x = 0; x",
-                  1,  // access
-                  0,
-                  0,
-                  EXPECT_RESULT, Number::New(CcTest::isolate(), 0));
+                  1, 1, EXPECT_RESULT);
   }
 }
 
 
 class AbsentPropertyContext: public DeclarationContext {
  protected:
-  virtual v8::Handle<Integer> Query(Local<Name> key) {
-    return v8::Handle<Integer>();
+  virtual v8::Local<Integer> Query(Local<Name> key) {
+    return v8::Local<Integer>();
   }
 };
 
@@ -291,21 +283,7 @@ TEST(Absent) {
   { AbsentPropertyContext context;
     context.Check("function x() { }; x",
                   1,  // access
-                  0,
-                  0,
-                  EXPECT_RESULT);
-  }
-
-  { AbsentPropertyContext context;
-    context.Check("const x; x",
-                  1,  // access
-                  0, 0, EXPECT_RESULT, Undefined(isolate));
-  }
-
-  { AbsentPropertyContext context;
-    context.Check("const x = 0; x",
-                  1,  // access
-                  0, 0, EXPECT_RESULT, Number::New(isolate, 0));
+                  1, 1, EXPECT_RESULT);
   }
 
   { AbsentPropertyContext context;
@@ -328,13 +306,13 @@ class AppearingPropertyContext: public DeclarationContext {
   AppearingPropertyContext() : state_(DECLARE) { }
 
  protected:
-  virtual v8::Handle<Integer> Query(Local<Name> key) {
+  virtual v8::Local<Integer> Query(Local<Name> key) {
     switch (state_) {
       case DECLARE:
         // Force declaration by returning that the
         // property is absent.
         state_ = INITIALIZE_IF_ASSIGN;
-        return Handle<Integer>();
+        return Local<Integer>();
       case INITIALIZE_IF_ASSIGN:
         // Return that the property is present so we only get the
         // setter called when initializing with a value.
@@ -345,7 +323,7 @@ class AppearingPropertyContext: public DeclarationContext {
         break;
     }
     // Do the lookup in the object.
-    return v8::Handle<Integer>();
+    return v8::Local<Integer>();
   }
 
  private:
@@ -373,21 +351,7 @@ TEST(Appearing) {
   { AppearingPropertyContext context;
     context.Check("function x() { }; x",
                   1,  // access
-                  0,
-                  0,
-                  EXPECT_RESULT);
-  }
-
-  { AppearingPropertyContext context;
-    context.Check("const x; x",
-                  1,  // access
-                  0, 0, EXPECT_RESULT, Undefined(CcTest::isolate()));
-  }
-
-  { AppearingPropertyContext context;
-    context.Check("const x = 0; x",
-                  1,  // access
-                  0, 0, EXPECT_RESULT, Number::New(CcTest::isolate(), 0));
+                  1, 1, EXPECT_RESULT);
   }
 }
 
@@ -397,7 +361,7 @@ class ExistsInPrototypeContext: public DeclarationContext {
  public:
   ExistsInPrototypeContext() { InitializeIfNeeded(); }
  protected:
-  virtual v8::Handle<Integer> Query(Local<Name> key) {
+  virtual v8::Local<Integer> Query(Local<Name> key) {
     // Let it seem that the property exists in the prototype object.
     return Integer::New(isolate(), v8::None);
   }
@@ -434,31 +398,15 @@ TEST(ExistsInPrototype) {
                   0,
                   EXPECT_RESULT, Number::New(CcTest::isolate(), 0));
   }
-
-  { ExistsInPrototypeContext context;
-    context.Check("const x; x",
-                  0,
-                  0,
-                  0,
-                  EXPECT_RESULT, Undefined(CcTest::isolate()));
-  }
-
-  { ExistsInPrototypeContext context;
-    context.Check("const x = 0; x",
-                  0,
-                  0,
-                  0,
-                  EXPECT_RESULT, Number::New(CcTest::isolate(), 0));
-  }
 }
 
 
 
 class AbsentInPrototypeContext: public DeclarationContext {
  protected:
-  virtual v8::Handle<Integer> Query(Local<Name> key) {
+  virtual v8::Local<Integer> Query(Local<Name> key) {
     // Let it seem that the property is absent in the prototype object.
-    return Handle<Integer>();
+    return Local<Integer>();
   }
 
   // Use the prototype as the holder for the interceptors.
@@ -491,18 +439,21 @@ class ExistsInHiddenPrototypeContext: public DeclarationContext {
   }
 
  protected:
-  virtual v8::Handle<Integer> Query(Local<Name> key) {
+  virtual v8::Local<Integer> Query(Local<Name> key) {
     // Let it seem that the property exists in the hidden prototype object.
     return Integer::New(isolate(), v8::None);
   }
 
   // Install the hidden prototype after the global object has been created.
-  virtual void PostInitializeContext(Handle<Context> context) {
+  virtual void PostInitializeContext(Local<Context> context) {
     Local<Object> global_object = context->Global();
-    Local<Object> hidden_proto = hidden_proto_->GetFunction()->NewInstance();
+    Local<Object> hidden_proto = hidden_proto_->GetFunction(context)
+                                     .ToLocalChecked()
+                                     ->NewInstance(context)
+                                     .ToLocalChecked();
     Local<Object> inner_global =
         Local<Object>::Cast(global_object->GetPrototype());
-    inner_global->SetPrototype(hidden_proto);
+    inner_global->SetPrototype(context, hidden_proto).FromJust();
   }
 
   // Use the hidden prototype as the holder for the interceptors.
@@ -529,23 +480,7 @@ TEST(ExistsInHiddenPrototype) {
   }
 
   { ExistsInHiddenPrototypeContext context;
-    context.Check("function x() { }; x",
-                  0,
-                  0,
-                  0,
-                  EXPECT_RESULT);
-  }
-
-  // TODO(mstarzinger): The semantics of global const is vague.
-  { ExistsInHiddenPrototypeContext context;
-    context.Check("const x; x", 0, 0, 0, EXPECT_RESULT,
-                  Undefined(CcTest::isolate()));
-  }
-
-  // TODO(mstarzinger): The semantics of global const is vague.
-  { ExistsInHiddenPrototypeContext context;
-    context.Check("const x = 0; x", 0, 0, 0, EXPECT_RESULT,
-                  Number::New(CcTest::isolate(), 0));
+    context.Check("function x() { }; x", 0, 1, 1, EXPECT_RESULT);
   }
 }
 
@@ -563,30 +498,31 @@ class SimpleContext {
     context_->Exit();
   }
 
-  void Check(const char* source,
-             Expectations expectations,
-             v8::Handle<Value> value = Local<Value>()) {
+  void Check(const char* source, Expectations expectations,
+             v8::Local<Value> value = Local<Value>()) {
     HandleScope scope(context_->GetIsolate());
-    TryCatch catcher;
+    TryCatch catcher(context_->GetIsolate());
     catcher.SetVerbose(true);
-    Local<Script> script =
-        Script::Compile(String::NewFromUtf8(context_->GetIsolate(), source));
+    MaybeLocal<Script> script = Script::Compile(
+        context_, String::NewFromUtf8(context_->GetIsolate(), source,
+                                      v8::NewStringType::kNormal)
+                      .ToLocalChecked());
     if (expectations == EXPECT_ERROR) {
       CHECK(script.IsEmpty());
       return;
     }
     CHECK(!script.IsEmpty());
-    Local<Value> result = script->Run();
+    MaybeLocal<Value> result = script.ToLocalChecked()->Run(context_);
     if (expectations == EXPECT_RESULT) {
       CHECK(!catcher.HasCaught());
       if (!value.IsEmpty()) {
-        CHECK(value->Equals(result));
+        CHECK(value->Equals(context_, result.ToLocalChecked()).FromJust());
       }
     } else {
       CHECK(expectations == EXPECT_EXCEPTION);
       CHECK(catcher.HasCaught());
       if (!value.IsEmpty()) {
-        CHECK(value->Equals(catcher.Exception()));
+        CHECK(value->Equals(context_, catcher.Exception()).FromJust());
       }
     }
   }
@@ -606,8 +542,6 @@ TEST(CrossScriptReferences) {
                   EXPECT_RESULT, Number::New(isolate, 1));
     context.Check("var x = 2; x",
                   EXPECT_RESULT, Number::New(isolate, 2));
-    context.Check("const x = 3; x", EXPECT_EXCEPTION);
-    context.Check("const x = 4; x", EXPECT_EXCEPTION);
     context.Check("x = 5; x",
                   EXPECT_RESULT, Number::New(isolate, 5));
     context.Check("var x = 6; x",
@@ -617,27 +551,10 @@ TEST(CrossScriptReferences) {
     context.Check("function x() { return 7 }; x()",
                   EXPECT_RESULT, Number::New(isolate, 7));
   }
-
-  { SimpleContext context;
-    context.Check("const x = 1; x",
-                  EXPECT_RESULT, Number::New(isolate, 1));
-    context.Check("var x = 2; x",  // assignment ignored
-                  EXPECT_RESULT, Number::New(isolate, 1));
-    context.Check("const x = 3; x", EXPECT_EXCEPTION);
-    context.Check("x = 4; x",  // assignment ignored
-                  EXPECT_RESULT, Number::New(isolate, 1));
-    context.Check("var x = 5; x",  // assignment ignored
-                  EXPECT_RESULT, Number::New(isolate, 1));
-    context.Check("this.x",
-                  EXPECT_RESULT, Number::New(isolate, 1));
-    context.Check("function x() { return 7 }; x",
-                  EXPECT_EXCEPTION);
-  }
 }
 
 
 TEST(CrossScriptReferences_Simple) {
-  i::FLAG_harmony_scoping = true;
   i::FLAG_use_strict = true;
 
   v8::Isolate* isolate = CcTest::isolate();
@@ -652,7 +569,6 @@ TEST(CrossScriptReferences_Simple) {
 
 
 TEST(CrossScriptReferences_Simple2) {
-  i::FLAG_harmony_scoping = true;
   i::FLAG_use_strict = true;
 
   v8::Isolate* isolate = CcTest::isolate();
@@ -675,8 +591,6 @@ TEST(CrossScriptReferences_Simple2) {
 
 
 TEST(CrossScriptReferencesHarmony) {
-  i::FLAG_harmony_scoping = true;
-
   v8::Isolate* isolate = CcTest::isolate();
   HandleScope scope(isolate);
 
@@ -818,9 +732,27 @@ TEST(CrossScriptReferencesHarmony) {
 }
 
 
+TEST(CrossScriptReferencesHarmonyRegress) {
+  v8::Isolate* isolate = CcTest::isolate();
+  HandleScope scope(isolate);
+  SimpleContext context;
+  context.Check(
+      "'use strict';"
+      "function i1() { "
+      "  let y = 10; return (typeof x2 === 'undefined' ? 0 : 2) + y"
+      "}"
+      "i1();"
+      "i1();",
+      EXPECT_RESULT, Number::New(isolate, 10));
+  context.Check(
+      "'use strict';"
+      "let x2 = 2; i1();",
+      EXPECT_RESULT, Number::New(isolate, 12));
+}
+
+
 TEST(GlobalLexicalOSR) {
   i::FLAG_use_strict = true;
-  i::FLAG_harmony_scoping = true;
 
   v8::Isolate* isolate = CcTest::isolate();
   HandleScope scope(isolate);
@@ -844,7 +776,6 @@ TEST(GlobalLexicalOSR) {
 
 TEST(CrossScriptConflicts) {
   i::FLAG_use_strict = true;
-  i::FLAG_harmony_scoping = true;
 
   HandleScope scope(CcTest::isolate());
 
@@ -880,16 +811,18 @@ TEST(CrossScriptConflicts) {
 
 
 TEST(CrossScriptDynamicLookup) {
-  i::FLAG_harmony_scoping = true;
-
   HandleScope handle_scope(CcTest::isolate());
 
   {
     SimpleContext context;
-    Local<String> undefined_string = String::NewFromUtf8(
-        CcTest::isolate(), "undefined", String::kInternalizedString);
-    Local<String> number_string = String::NewFromUtf8(
-        CcTest::isolate(), "number", String::kInternalizedString);
+    Local<String> undefined_string =
+        String::NewFromUtf8(CcTest::isolate(), "undefined",
+                            v8::NewStringType::kInternalized)
+            .ToLocalChecked();
+    Local<String> number_string =
+        String::NewFromUtf8(CcTest::isolate(), "number",
+                            v8::NewStringType::kInternalized)
+            .ToLocalChecked();
 
     context.Check(
         "function f(o) { with(o) { return x; } }"
@@ -913,8 +846,6 @@ TEST(CrossScriptDynamicLookup) {
 
 
 TEST(CrossScriptGlobal) {
-  i::FLAG_harmony_scoping = true;
-
   HandleScope handle_scope(CcTest::isolate());
   {
     SimpleContext context;
@@ -957,16 +888,18 @@ TEST(CrossScriptGlobal) {
 
 
 TEST(CrossScriptStaticLookupUndeclared) {
-  i::FLAG_harmony_scoping = true;
-
   HandleScope handle_scope(CcTest::isolate());
 
   {
     SimpleContext context;
-    Local<String> undefined_string = String::NewFromUtf8(
-        CcTest::isolate(), "undefined", String::kInternalizedString);
-    Local<String> number_string = String::NewFromUtf8(
-        CcTest::isolate(), "number", String::kInternalizedString);
+    Local<String> undefined_string =
+        String::NewFromUtf8(CcTest::isolate(), "undefined",
+                            v8::NewStringType::kInternalized)
+            .ToLocalChecked();
+    Local<String> number_string =
+        String::NewFromUtf8(CcTest::isolate(), "number",
+                            v8::NewStringType::kInternalized)
+            .ToLocalChecked();
 
     context.Check(
         "function f(o) { return x; }"
@@ -991,7 +924,6 @@ TEST(CrossScriptStaticLookupUndeclared) {
 
 
 TEST(CrossScriptLoadICs) {
-  i::FLAG_harmony_scoping = true;
   i::FLAG_allow_natives_syntax = true;
 
   HandleScope handle_scope(CcTest::isolate());
@@ -1047,7 +979,6 @@ TEST(CrossScriptLoadICs) {
 
 
 TEST(CrossScriptStoreICs) {
-  i::FLAG_harmony_scoping = true;
   i::FLAG_allow_natives_syntax = true;
 
   HandleScope handle_scope(CcTest::isolate());
@@ -1125,7 +1056,6 @@ TEST(CrossScriptStoreICs) {
 
 
 TEST(CrossScriptAssignmentToConst) {
-  i::FLAG_harmony_scoping = true;
   i::FLAG_allow_natives_syntax = true;
 
   HandleScope handle_scope(CcTest::isolate());
@@ -1148,7 +1078,6 @@ TEST(CrossScriptAssignmentToConst) {
 
 
 TEST(Regress425510) {
-  i::FLAG_harmony_scoping = true;
   i::FLAG_allow_natives_syntax = true;
 
   HandleScope handle_scope(CcTest::isolate());
@@ -1161,5 +1090,87 @@ TEST(Regress425510) {
     for (int i = 0; i < 100; i++) {
       context.Check("o.prototype", EXPECT_EXCEPTION);
     }
+  }
+}
+
+
+TEST(Regress3941) {
+  i::FLAG_allow_natives_syntax = true;
+
+  HandleScope handle_scope(CcTest::isolate());
+
+  {
+    SimpleContext context;
+    context.Check("function f() { x = 1; }", EXPECT_RESULT,
+                  Undefined(CcTest::isolate()));
+    context.Check("'use strict'; f(); let x = 2; x", EXPECT_EXCEPTION);
+  }
+
+
+  {
+    // Train ICs.
+    SimpleContext context;
+    context.Check("function f() { x = 1; }", EXPECT_RESULT,
+                  Undefined(CcTest::isolate()));
+    for (int i = 0; i < 4; i++) {
+      context.Check("f(); x", EXPECT_RESULT, Number::New(CcTest::isolate(), 1));
+    }
+    context.Check("'use strict'; f(); let x = 2; x", EXPECT_EXCEPTION);
+  }
+
+
+  {
+    // Optimize.
+    SimpleContext context;
+    context.Check("function f() { x = 1; }", EXPECT_RESULT,
+                  Undefined(CcTest::isolate()));
+    for (int i = 0; i < 4; i++) {
+      context.Check("f(); x", EXPECT_RESULT, Number::New(CcTest::isolate(), 1));
+    }
+    context.Check("%OptimizeFunctionOnNextCall(f); f(); x", EXPECT_RESULT,
+                  Number::New(CcTest::isolate(), 1));
+
+    context.Check("'use strict'; f(); let x = 2; x", EXPECT_EXCEPTION);
+  }
+}
+
+
+TEST(Regress3941_Reads) {
+  i::FLAG_allow_natives_syntax = true;
+
+  HandleScope handle_scope(CcTest::isolate());
+
+  {
+    SimpleContext context;
+    context.Check("function f() { return x; }", EXPECT_RESULT,
+                  Undefined(CcTest::isolate()));
+    context.Check("'use strict'; f(); let x = 2; x", EXPECT_EXCEPTION);
+  }
+
+
+  {
+    // Train ICs.
+    SimpleContext context;
+    context.Check("function f() { return x; }", EXPECT_RESULT,
+                  Undefined(CcTest::isolate()));
+    for (int i = 0; i < 4; i++) {
+      context.Check("f()", EXPECT_EXCEPTION);
+    }
+    context.Check("'use strict'; f(); let x = 2; x", EXPECT_EXCEPTION);
+  }
+
+
+  {
+    // Optimize.
+    SimpleContext context;
+    context.Check("function f() { return x; }", EXPECT_RESULT,
+                  Undefined(CcTest::isolate()));
+    for (int i = 0; i < 4; i++) {
+      context.Check("f()", EXPECT_EXCEPTION);
+    }
+    context.Check("%OptimizeFunctionOnNextCall(f);", EXPECT_RESULT,
+                  Undefined(CcTest::isolate()));
+
+    context.Check("'use strict'; f(); let x = 2; x", EXPECT_EXCEPTION);
   }
 }

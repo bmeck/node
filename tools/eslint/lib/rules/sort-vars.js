@@ -9,29 +9,53 @@
 // Rule Definition
 //------------------------------------------------------------------------------
 
-module.exports = function(context) {
+module.exports = {
+    meta: {
+        docs: {
+            description: "require variables within the same declaration block to be sorted",
+            category: "Stylistic Issues",
+            recommended: false
+        },
 
-    var configuration = context.options[0] || {},
-        ignoreCase = configuration.ignoreCase || false;
+        schema: [
+            {
+                type: "object",
+                properties: {
+                    ignoreCase: {
+                        type: "boolean"
+                    }
+                },
+                additionalProperties: false
+            }
+        ]
+    },
 
-    return {
-        "VariableDeclaration": function(node) {
-            node.declarations.reduce(function(memo, decl) {
-                var lastVariableName = memo.id.name,
-                    currenVariableName = decl.id.name;
+    create(context) {
 
-                if (ignoreCase) {
-                    lastVariableName = lastVariableName.toLowerCase();
-                    currenVariableName = currenVariableName.toLowerCase();
-                }
+        const configuration = context.options[0] || {},
+            ignoreCase = configuration.ignoreCase || false;
 
-                if (currenVariableName < lastVariableName) {
-                    context.report(decl, "Variables within the same declaration block should be sorted alphabetically");
-                    return memo;
-                } else {
+        return {
+            VariableDeclaration(node) {
+                const idDeclarations = node.declarations.filter(decl => decl.id.type === "Identifier");
+
+                idDeclarations.slice(1).reduce((memo, decl) => {
+                    let lastVariableName = memo.id.name,
+                        currenVariableName = decl.id.name;
+
+                    if (ignoreCase) {
+                        lastVariableName = lastVariableName.toLowerCase();
+                        currenVariableName = currenVariableName.toLowerCase();
+                    }
+
+                    if (currenVariableName < lastVariableName) {
+                        context.report({ node: decl, message: "Variables within the same declaration block should be sorted alphabetically." });
+                        return memo;
+                    }
                     return decl;
-                }
-            }, node.declarations[0]);
-        }
-    };
+
+                }, idDeclarations[0]);
+            }
+        };
+    }
 };

@@ -1,15 +1,15 @@
 /**
  * @fileoverview Util class to find config files.
  * @author Aliaksei Shytkin
- * @copyright 2014 Michael McLaughlin. All rights reserved.
  */
+
 "use strict";
 
 //------------------------------------------------------------------------------
 // Requirements
 //------------------------------------------------------------------------------
 
-var fs = require("fs"),
+const fs = require("fs"),
     path = require("path");
 
 //------------------------------------------------------------------------------
@@ -25,10 +25,33 @@ var fs = require("fs"),
  */
 function getDirectoryEntries(directory) {
     try {
+
         return fs.readdirSync(directory);
     } catch (ex) {
         return [];
     }
+}
+
+/**
+ * Create a hash of filenames from a directory listing
+ * @param {string[]} entries Array of directory entries.
+ * @param {string} directory Path to a current directory.
+ * @param {string[]} supportedConfigs List of support filenames.
+ * @returns {Object} Hashmap of filenames
+ */
+function normalizeDirectoryEntries(entries, directory, supportedConfigs) {
+    const fileHash = {};
+
+    entries.forEach(entry => {
+        if (supportedConfigs.indexOf(entry) >= 0) {
+            const resolvedEntry = path.resolve(directory, entry);
+
+            if (fs.statSync(resolvedEntry).isFile()) {
+                fileHash[entry] = resolvedEntry;
+            }
+        }
+    });
+    return fileHash;
 }
 
 //------------------------------------------------------------------------------
@@ -36,132 +59,87 @@ function getDirectoryEntries(directory) {
 //------------------------------------------------------------------------------
 
 /**
- * FileFinder
- * @constructor
- * @param {...string} arguments The basename(s) of the file(s) to find.
+ * FileFinder class
  */
-function FileFinder() {
-    this.fileNames = Array.prototype.slice.call(arguments);
-    this.cache = {};
-}
+class FileFinder {
 
-/**
- * Find one instance of a specified file name in directory or in a parent directory.
- * Cache the results.
- * Does not check if a matching directory entry is a file, and intentionally
- * only searches for the first file name in this.fileNames.
- * Is currently used by lib/ignored_paths.js to find an .eslintignore file.
- * @param  {string} directory The directory to start the search from.
- * @returns {string} Path of the file found, or an empty string if not found.
- */
-FileFinder.prototype.findInDirectoryOrParents = function (directory) {
-    var cache = this.cache,
-        child,
-        dirs,
-        filePath,
-        i,
-        name,
-        searched;
-
-    if (!directory) {
-        directory = process.cwd();
+    /**
+     * @param {string[]} files The basename(s) of the file(s) to find.
+     * @param {stirng} cwd Current working directory
+     */
+    constructor(files, cwd) {
+        this.fileNames = Array.isArray(files) ? files : [files];
+        this.cwd = cwd || process.cwd();
+        this.cache = {};
     }
 
-    if (cache.hasOwnProperty(directory)) {
-        return cache[directory];
-    }
+    /**
+     * Find all instances of files with the specified file names, in directory and
+     * parent directories. Cache the results.
+     * Does not check if a matching directory entry is a file.
+     * Searches for all the file names in this.fileNames.
+     * Is currently used by lib/config.js to find .eslintrc and package.json files.
+     * @param  {string} directory The directory to start the search from.
+     * @returns {GeneratorFunction} to iterate the file paths found
+     */
+    *findAllInDirectoryAndParents(directory) {
+        const cache = this.cache;
 
-    dirs = [];
-    searched = 0;
-    name = this.fileNames[0];
-
-    while (directory !== child) {
-        dirs[searched++] = directory;
-
-        if (getDirectoryEntries(directory).indexOf(name) !== -1) {
-            filePath = path.resolve(directory, name);
-            break;
+        if (directory) {
+            directory = path.resolve(this.cwd, directory);
+        } else {
+            directory = this.cwd;
         }
 
-        child = directory;
+        if (cache.hasOwnProperty(directory)) {
+            yield* cache[directory];
+            return; // to avoid doing the normal loop afterwards
+        }
 
-        // Assign parent directory to directory.
-        directory = path.dirname(directory);
-    }
+        const dirs = [];
+        const fileNames = this.fileNames;
+        let searched = 0;
 
-    for (i = 0; i < searched; i++) {
-        cache[dirs[i]] = filePath;
-    }
+        do {
+            dirs[searched++] = directory;
+            cache[directory] = [];
 
-    return filePath || String();
-};
+            const filesMap = normalizeDirectoryEntries(getDirectoryEntries(directory), directory, fileNames);
 
-/**
- * Find all instances of files with the specified file names, in directory and
- * parent directories. Cache the results.
- * Does not check if a matching directory entry is a file.
- * Searches for all the file names in this.fileNames.
- * Is currently used by lib/config.js to find .eslintrc and package.json files.
- * @param  {string} directory The directory to start the search from.
- * @returns {string[]} The file paths found.
- */
-FileFinder.prototype.findAllInDirectoryAndParents = function (directory) {
-    var cache = this.cache,
-        child,
-        dirs,
-        name,
-        fileNames,
-        fileNamesCount,
-        filePath,
-        i,
-        j,
-        searched;
+            if (Object.keys(filesMap).length) {
+                for (let k = 0; k < fileNames.length; k++) {
 
-    if (!directory) {
-        directory = process.cwd();
-    }
+                    if (filesMap[fileNames[k]]) {
+                        const filePath = filesMap[fileNames[k]];
 
-    if (cache.hasOwnProperty(directory)) {
-        return cache[directory];
-    }
-
-    dirs = [];
-    searched = 0;
-    fileNames = this.fileNames;
-    fileNamesCount = fileNames.length;
-
-    do {
-        dirs[searched++] = directory;
-        cache[directory] = [];
-
-        for (i = 0; i < fileNamesCount; i++) {
-            name = fileNames[i];
-
-            if (getDirectoryEntries(directory).indexOf(name) !== -1) {
-                filePath = path.resolve(directory, name);
-
-                // Add the file path to the cache of each directory searched.
-                for (j = 0; j < searched; j++) {
-                    cache[dirs[j]].push(filePath);
+                        // Add the file path to the cache of each directory searched.
+                        for (let j = 0; j < searched; j++) {
+                            cache[dirs[j]].push(filePath);
+                        }
+                        yield filePath;
+                        break;
+                    }
                 }
             }
+
+            const child = directory;
+
+            // Assign parent directory to directory.
+            directory = path.dirname(directory);
+
+            if (directory === child) {
+                return;
+            }
+
+        } while (!cache.hasOwnProperty(directory));
+
+        // Add what has been cached previously to the cache of each directory searched.
+        for (let i = 0; i < searched; i++) {
+            dirs.push.apply(cache[dirs[i]], cache[directory]);
         }
-        child = directory;
 
-        // Assign parent directory to directory.
-        directory = path.dirname(directory);
-
-        if (directory === child) {
-            return cache[dirs[0]];
-        }
-    } while (!cache.hasOwnProperty(directory));
-
-    // Add what has been cached previously to the cache of each directory searched.
-    for (i = 0; i < searched; i++) {
-        dirs.push.apply(cache[dirs[i]], cache[directory]);
+        yield* cache[dirs[0]];
     }
-
-    return cache[dirs[0]];
-};
+}
 
 module.exports = FileFinder;

@@ -4,45 +4,57 @@
 
 #include "src/compiler/all-nodes.h"
 
+#include "src/compiler/graph.h"
+
 namespace v8 {
 namespace internal {
 namespace compiler {
 
-AllNodes::AllNodes(Zone* local_zone, const Graph* graph)
-    : live(local_zone),
-      gray(local_zone),
-      state(graph->NodeCount(), AllNodes::kDead, local_zone) {
-  Node* end = graph->end();
-  state[end->id()] = AllNodes::kLive;
-  live.push_back(end);
-  // Find all live nodes reachable from end.
-  for (size_t i = 0; i < live.size(); i++) {
-    for (Node* const input : live[i]->inputs()) {
+AllNodes::AllNodes(Zone* local_zone, const Graph* graph, bool only_inputs)
+    : reachable(local_zone),
+      is_reachable_(graph->NodeCount(), false, local_zone),
+      only_inputs_(only_inputs) {
+  Mark(local_zone, graph->end(), graph);
+}
+
+AllNodes::AllNodes(Zone* local_zone, Node* end, const Graph* graph,
+                   bool only_inputs)
+    : reachable(local_zone),
+      is_reachable_(graph->NodeCount(), false, local_zone),
+      only_inputs_(only_inputs) {
+  Mark(local_zone, end, graph);
+}
+
+void AllNodes::Mark(Zone* local_zone, Node* end, const Graph* graph) {
+  DCHECK_LT(end->id(), graph->NodeCount());
+  is_reachable_[end->id()] = true;
+  reachable.push_back(end);
+  // Find all nodes reachable from {end}.
+  for (size_t i = 0; i < reachable.size(); i++) {
+    for (Node* const input : reachable[i]->inputs()) {
       if (input == nullptr) {
         // TODO(titzer): print a warning.
         continue;
       }
-      if (input->id() >= graph->NodeCount()) {
-        // TODO(titzer): print a warning.
-        continue;
+      if (!is_reachable_[input->id()]) {
+        is_reachable_[input->id()] = true;
+        reachable.push_back(input);
       }
-      if (state[input->id()] != AllNodes::kLive) {
-        live.push_back(input);
-        state[input->id()] = AllNodes::kLive;
+    }
+    if (!only_inputs_) {
+      for (Node* use : reachable[i]->uses()) {
+        if (use == nullptr || use->id() >= graph->NodeCount()) {
+          continue;
+        }
+        if (!is_reachable_[use->id()]) {
+          is_reachable_[use->id()] = true;
+          reachable.push_back(use);
+        }
       }
     }
   }
+}
 
-  // Find all nodes that are not reachable from end that use live nodes.
-  for (size_t i = 0; i < live.size(); i++) {
-    for (Node* const use : live[i]->uses()) {
-      if (state[use->id()] == AllNodes::kDead) {
-        gray.push_back(use);
-        state[use->id()] = AllNodes::kGray;
-      }
-    }
-  }
-}
-}
-}
-}  // namespace v8::internal::compiler
+}  // namespace compiler
+}  // namespace internal
+}  // namespace v8

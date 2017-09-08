@@ -6,7 +6,8 @@
 #define V8_COMPILER_CONTROL_FLOW_OPTIMIZER_H_
 
 #include "src/compiler/node-marker.h"
-#include "src/zone-containers.h"
+#include "src/globals.h"
+#include "src/zone/zone-containers.h"
 
 namespace v8 {
 namespace internal {
@@ -15,14 +16,13 @@ namespace compiler {
 // Forward declarations.
 class CommonOperatorBuilder;
 class Graph;
-class JSGraph;
 class MachineOperatorBuilder;
 class Node;
 
-
-class ControlFlowOptimizer FINAL {
+class V8_EXPORT_PRIVATE ControlFlowOptimizer final {
  public:
-  ControlFlowOptimizer(JSGraph* jsgraph, Zone* zone);
+  ControlFlowOptimizer(Graph* graph, CommonOperatorBuilder* common,
+                       MachineOperatorBuilder* machine, Zone* zone);
 
   void Optimize();
 
@@ -31,13 +31,17 @@ class ControlFlowOptimizer FINAL {
   void VisitNode(Node* node);
   void VisitBranch(Node* node);
 
-  CommonOperatorBuilder* common() const;
-  Graph* graph() const;
-  JSGraph* jsgraph() const { return jsgraph_; }
-  MachineOperatorBuilder* machine() const;
+  bool TryBuildSwitch(Node* node);
+  bool TryCloneBranch(Node* node);
+
+  Graph* graph() const { return graph_; }
+  CommonOperatorBuilder* common() const { return common_; }
+  MachineOperatorBuilder* machine() const { return machine_; }
   Zone* zone() const { return zone_; }
 
-  JSGraph* const jsgraph_;
+  Graph* const graph_;
+  CommonOperatorBuilder* const common_;
+  MachineOperatorBuilder* const machine_;
   ZoneQueue<Node*> queue_;
   NodeMarker<bool> queued_;
   Zone* const zone_;

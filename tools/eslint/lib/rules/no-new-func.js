@@ -9,15 +9,37 @@
 // Rule Definition
 //------------------------------------------------------------------------------
 
-module.exports = function(context) {
+module.exports = {
+    meta: {
+        docs: {
+            description: "disallow `new` operators with the `Function` object",
+            category: "Best Practices",
+            recommended: false
+        },
 
-    return {
+        schema: []
+    },
 
-        "NewExpression": function(node) {
-            if (node.callee.name === "Function") {
-                context.report(node, "The Function constructor is eval.");
-            }
+    create(context) {
+
+        //--------------------------------------------------------------------------
+        // Helpers
+        //--------------------------------------------------------------------------
+
+        /**
+         * Reports a node.
+         * @param {ASTNode} node The node to report
+         * @returns {void}
+         * @private
+         */
+        function report(node) {
+            context.report({ node, message: "The Function constructor is eval." });
         }
-    };
 
+        return {
+            "NewExpression[callee.name = 'Function']": report,
+            "CallExpression[callee.name = 'Function']": report
+        };
+
+    }
 };

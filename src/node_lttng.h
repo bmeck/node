@@ -1,6 +1,8 @@
 #ifndef SRC_NODE_LTTNG_H_
 #define SRC_NODE_LTTNG_H_
 
+#if defined(NODE_WANT_INTERNALS) && NODE_WANT_INTERNALS
+
 #include "node.h"
 #include "v8.h"
 #include "env.h"
@@ -33,8 +35,10 @@ typedef struct {
 
 namespace node {
 
-void InitLTTNG(Environment* env, v8::Handle<v8::Object> target);
+void InitLTTNG(Environment* env, v8::Local<v8::Object> target);
 
 }  // namespace node
+
+#endif  // defined(NODE_WANT_INTERNALS) && NODE_WANT_INTERNALS
 
 #endif  // SRC_NODE_LTTNG_H_

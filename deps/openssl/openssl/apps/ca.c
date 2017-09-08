@@ -99,25 +99,19 @@
 #undef PROG
 #define PROG ca_main
 
-#define BASE_SECTION    "ca"
-#define CONFIG_FILE "openssl.cnf"
+#define BASE_SECTION            "ca"
+#define CONFIG_FILE             "openssl.cnf"
 
 #define ENV_DEFAULT_CA          "default_ca"
 
-#define STRING_MASK     "string_mask"
+#define STRING_MASK             "string_mask"
 #define UTF8_IN                 "utf8"
 
-#define ENV_DIR                 "dir"
-#define ENV_CERTS               "certs"
-#define ENV_CRL_DIR             "crl_dir"
-#define ENV_CA_DB               "CA_DB"
 #define ENV_NEW_CERTS_DIR       "new_certs_dir"
 #define ENV_CERTIFICATE         "certificate"
 #define ENV_SERIAL              "serial"
 #define ENV_CRLNUMBER           "crlnumber"
-#define ENV_CRL                 "crl"
 #define ENV_PRIVATE_KEY         "private_key"
-#define ENV_RANDFILE            "RANDFILE"
 #define ENV_DEFAULT_DAYS        "default_days"
 #define ENV_DEFAULT_STARTDATE   "default_startdate"
 #define ENV_DEFAULT_ENDDATE     "default_enddate"
@@ -325,9 +319,7 @@ int MAIN(int argc, char **argv)
 #define BSIZE 256
     MS_STATIC char buf[3][BSIZE];
     char *randfile = NULL;
-#ifndef OPENSSL_NO_ENGINE
     char *engine = NULL;
-#endif
     char *tofree = NULL;
     DB_ATTR db_attr;
 
@@ -563,7 +555,7 @@ int MAIN(int argc, char **argv)
 #ifdef OPENSSL_SYS_VMS
         len = strlen(s) + sizeof(CONFIG_FILE);
         tofree = OPENSSL_malloc(len);
-        if(!tofree) {
+        if (!tofree) {
             BIO_printf(bio_err, "Out of memory\n");
             goto err;
         }
@@ -571,7 +563,7 @@ int MAIN(int argc, char **argv)
 #else
         len = strlen(s) + sizeof(CONFIG_FILE) + 1;
         tofree = OPENSSL_malloc(len);
-        if(!tofree) {
+        if (!tofree) {
             BIO_printf(bio_err, "Out of memory\n");
             goto err;
         }
@@ -601,9 +593,7 @@ int MAIN(int argc, char **argv)
     if (!load_config(bio_err, conf))
         goto err;
 
-#ifndef OPENSSL_NO_ENGINE
     e = setup_engine(bio_err, engine, 0);
-#endif
 
     /* Lets get the config section we are using */
     if (section == NULL) {
@@ -1491,6 +1481,7 @@ int MAIN(int argc, char **argv)
     X509_CRL_free(crl);
     NCONF_free(conf);
     NCONF_free(extconf);
+    release_engine(e);
     OBJ_cleanup();
     apps_shutdown();
     OPENSSL_EXIT(ret);
@@ -2109,25 +2100,23 @@ static int do_body(X509 **xret, EVP_PKEY *pkey, X509 *x509,
         goto err;
 
     /* We now just add it to the database */
-    row[DB_type] = (char *)OPENSSL_malloc(2);
-
     tm = X509_get_notAfter(ret);
-    row[DB_exp_date] = (char *)OPENSSL_malloc(tm->length + 1);
-    memcpy(row[DB_exp_date], tm->data, tm->length);
-    row[DB_exp_date][tm->length] = '\0';
-
-    row[DB_rev_date] = NULL;
-
-    /* row[DB_serial] done already */
-    row[DB_file] = (char *)OPENSSL_malloc(8);
+    row[DB_type] = OPENSSL_malloc(2);
+    row[DB_exp_date] = OPENSSL_malloc(tm->length + 1);
+    row[DB_rev_date] = OPENSSL_malloc(1);
+    row[DB_file] = OPENSSL_malloc(8);
     row[DB_name] = X509_NAME_oneline(X509_get_subject_name(ret), NULL, 0);
-
     if ((row[DB_type] == NULL) || (row[DB_exp_date] == NULL) ||
+        (row[DB_rev_date] == NULL) ||
         (row[DB_file] == NULL) || (row[DB_name] == NULL)) {
         BIO_printf(bio_err, "Memory allocation failure\n");
         goto err;
     }
-    BUF_strlcpy(row[DB_file], "unknown", 8);
+
+    memcpy(row[DB_exp_date], tm->data, tm->length);
+    row[DB_exp_date][tm->length] = '\0';
+    row[DB_rev_date][0] = '\0';
+    strcpy(row[DB_file], "unknown");
     row[DB_type][0] = 'V';
     row[DB_type][1] = '\0';
 
@@ -2137,10 +2126,8 @@ static int do_body(X509 **xret, EVP_PKEY *pkey, X509 *x509,
         goto err;
     }
 
-    for (i = 0; i < DB_NUMBER; i++) {
+    for (i = 0; i < DB_NUMBER; i++)
         irow[i] = row[i];
-        row[i] = NULL;
-    }
     irow[DB_NUMBER] = NULL;
 
     if (!TXT_DB_insert(db->db, irow)) {
@@ -2148,11 +2135,14 @@ static int do_body(X509 **xret, EVP_PKEY *pkey, X509 *x509,
         BIO_printf(bio_err, "TXT_DB error number %ld\n", db->db->error);
         goto err;
     }
+    irow = NULL;
     ok = 1;
  err:
-    for (i = 0; i < DB_NUMBER; i++)
-        if (row[i] != NULL)
+    if (irow != NULL) {
+        for (i = 0; i < DB_NUMBER; i++)
             OPENSSL_free(row[i]);
+        OPENSSL_free(irow);
+    }
 
     if (CAname != NULL)
         X509_NAME_free(CAname);
@@ -2235,7 +2225,6 @@ static int certify_spkac(X509 **xret, char *infile, EVP_PKEY *pkey,
     sk = CONF_get_section(parms, "default");
     if (sk_CONF_VALUE_num(sk) == 0) {
         BIO_printf(bio_err, "no name/value pairs found in %s\n", infile);
-        CONF_free(parms);
         goto err;
     }
 
@@ -2313,6 +2302,7 @@ static int certify_spkac(X509 **xret, char *infile, EVP_PKEY *pkey,
 
     j = NETSCAPE_SPKI_verify(spki, pktmp);
     if (j <= 0) {
+        EVP_PKEY_free(pktmp);
         BIO_printf(bio_err,
                    "signature verification failed on SPKAC public key\n");
         goto err;
@@ -2407,17 +2397,19 @@ static int do_revoke(X509 *x509, CA_DB *db, int type, char *value)
             goto err;
         }
 
-        for (i = 0; i < DB_NUMBER; i++) {
+        for (i = 0; i < DB_NUMBER; i++)
             irow[i] = row[i];
-            row[i] = NULL;
-        }
         irow[DB_NUMBER] = NULL;
 
         if (!TXT_DB_insert(db->db, irow)) {
             BIO_printf(bio_err, "failed to update database\n");
             BIO_printf(bio_err, "TXT_DB error number %ld\n", db->db->error);
+            OPENSSL_free(irow);
             goto err;
         }
+
+        for (i = 0; i < DB_NUMBER; i++)
+            row[i] = NULL;
 
         /* Revoke Certificate */
         if (type == -1)
@@ -2538,6 +2530,8 @@ static int do_updatedb(CA_DB *db)
     char **rrow, *a_tm_s;
 
     a_tm = ASN1_UTCTIME_new();
+    if (a_tm == NULL)
+        return -1;
 
     /* get actual time and make a string */
     a_tm = X509_gmtime_adj(a_tm, 0);
@@ -2821,7 +2815,7 @@ int unpack_revinfo(ASN1_TIME **prevtm, int *preason, ASN1_OBJECT **phold,
     ASN1_GENERALIZEDTIME *comp_time = NULL;
     tmp = BUF_strdup(str);
 
-    if(!tmp) {
+    if (!tmp) {
         BIO_printf(bio_err, "memory allocation failure\n");
         goto err;
     }
@@ -2843,7 +2837,7 @@ int unpack_revinfo(ASN1_TIME **prevtm, int *preason, ASN1_OBJECT **phold,
 
     if (prevtm) {
         *prevtm = ASN1_UTCTIME_new();
-        if(!*prevtm) {
+        if (!*prevtm) {
             BIO_printf(bio_err, "memory allocation failure\n");
             goto err;
         }
@@ -2887,7 +2881,7 @@ int unpack_revinfo(ASN1_TIME **prevtm, int *preason, ASN1_OBJECT **phold,
                 goto err;
             }
             comp_time = ASN1_GENERALIZEDTIME_new();
-            if(!comp_time) {
+            if (!comp_time) {
                 BIO_printf(bio_err, "memory allocation failure\n");
                 goto err;
             }

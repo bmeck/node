@@ -25,10 +25,6 @@
 #include <stdint.h>
 #include <errno.h>
 
-#include <ifaddrs.h>
-#include <net/if.h>
-#include <net/if_dl.h>
-
 #include <mach/mach.h>
 #include <mach/mach_time.h>
 #include <mach-o/dyld.h> /* _NSGetExecutablePath */
@@ -198,9 +194,11 @@ int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
     return -EINVAL;  /* FIXME(bnoordhuis) Translate error. */
   }
 
-  *cpu_infos = malloc(numcpus * sizeof(**cpu_infos));
-  if (!(*cpu_infos))
-    return -ENOMEM;  /* FIXME(bnoordhuis) Deallocate info? */
+  *cpu_infos = uv__malloc(numcpus * sizeof(**cpu_infos));
+  if (!(*cpu_infos)) {
+    vm_deallocate(mach_task_self(), (vm_address_t)info, msg_type);
+    return -ENOMEM;
+  }
 
   *count = numcpus;
 
@@ -213,7 +211,7 @@ int uv_cpu_info(uv_cpu_info_t** cpu_infos, int* count) {
     cpu_info->cpu_times.idle = (uint64_t)(info[i].cpu_ticks[2]) * multiplier;
     cpu_info->cpu_times.irq = 0;
 
-    cpu_info->model = strdup(model);
+    cpu_info->model = uv__strdup(model);
     cpu_info->speed = cpuspeed/1000000;
   }
   vm_deallocate(mach_task_self(), (vm_address_t)info, msg_type);
@@ -226,106 +224,8 @@ void uv_free_cpu_info(uv_cpu_info_t* cpu_infos, int count) {
   int i;
 
   for (i = 0; i < count; i++) {
-    free(cpu_infos[i].model);
+    uv__free(cpu_infos[i].model);
   }
 
-  free(cpu_infos);
-}
-
-
-int uv_interface_addresses(uv_interface_address_t** addresses, int* count) {
-  struct ifaddrs *addrs, *ent;
-  uv_interface_address_t* address;
-  int i;
-  struct sockaddr_dl *sa_addr;
-
-  if (getifaddrs(&addrs))
-    return -errno;
-
-  *count = 0;
-
-  /* Count the number of interfaces */
-  for (ent = addrs; ent != NULL; ent = ent->ifa_next) {
-    if (!((ent->ifa_flags & IFF_UP) && (ent->ifa_flags & IFF_RUNNING)) ||
-        (ent->ifa_addr == NULL) ||
-        (ent->ifa_addr->sa_family == AF_LINK)) {
-      continue;
-    }
-
-    (*count)++;
-  }
-
-  *addresses = malloc(*count * sizeof(**addresses));
-  if (!(*addresses))
-    return -ENOMEM;
-
-  address = *addresses;
-
-  for (ent = addrs; ent != NULL; ent = ent->ifa_next) {
-    if (!((ent->ifa_flags & IFF_UP) && (ent->ifa_flags & IFF_RUNNING)))
-      continue;
-
-    if (ent->ifa_addr == NULL)
-      continue;
-
-    /*
-     * On Mac OS X getifaddrs returns information related to Mac Addresses for
-     * various devices, such as firewire, etc. These are not relevant here.
-     */
-    if (ent->ifa_addr->sa_family == AF_LINK)
-      continue;
-
-    address->name = strdup(ent->ifa_name);
-
-    if (ent->ifa_addr->sa_family == AF_INET6) {
-      address->address.address6 = *((struct sockaddr_in6*) ent->ifa_addr);
-    } else {
-      address->address.address4 = *((struct sockaddr_in*) ent->ifa_addr);
-    }
-
-    if (ent->ifa_netmask->sa_family == AF_INET6) {
-      address->netmask.netmask6 = *((struct sockaddr_in6*) ent->ifa_netmask);
-    } else {
-      address->netmask.netmask4 = *((struct sockaddr_in*) ent->ifa_netmask);
-    }
-
-    address->is_internal = !!(ent->ifa_flags & IFF_LOOPBACK);
-
-    address++;
-  }
-
-  /* Fill in physical addresses for each interface */
-  for (ent = addrs; ent != NULL; ent = ent->ifa_next) {
-    if (!((ent->ifa_flags & IFF_UP) && (ent->ifa_flags & IFF_RUNNING)) ||
-        (ent->ifa_addr == NULL) ||
-        (ent->ifa_addr->sa_family != AF_LINK)) {
-      continue;
-    }
-
-    address = *addresses;
-
-    for (i = 0; i < (*count); i++) {
-      if (strcmp(address->name, ent->ifa_name) == 0) {
-        sa_addr = (struct sockaddr_dl*)(ent->ifa_addr);
-        memcpy(address->phys_addr, LLADDR(sa_addr), sizeof(address->phys_addr));
-      }
-      address++;
-    }
-  }
-
-  freeifaddrs(addrs);
-
-  return 0;
-}
-
-
-void uv_free_interface_addresses(uv_interface_address_t* addresses,
-  int count) {
-  int i;
-
-  for (i = 0; i < count; i++) {
-    free(addresses[i].name);
-  }
-
-  free(addresses);
+  uv__free(cpu_infos);
 }

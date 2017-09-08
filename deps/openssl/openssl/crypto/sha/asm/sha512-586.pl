@@ -37,7 +37,7 @@
 #
 # IALU code-path is optimized for elder Pentiums. On vanilla Pentium
 # performance improvement over compiler generated code reaches ~60%,
-# while on PIII - ~35%. On newer µ-archs improvement varies from 15%
+# while on PIII - ~35%. On newer Âµ-archs improvement varies from 15%
 # to 50%, but it's less important as they are expected to execute SSE2
 # code-path, which is commonly ~2-3x faster [than compiler generated
 # code]. SSE2 code-path is as fast as original sha512-sse2.pl, even
@@ -373,7 +373,7 @@ if ($sse2) {
 
 &set_label("16_79_sse2",16);
     for ($j=0;$j<2;$j++) {			# 2x unroll
-	#&movq	("mm7",&QWP(8*(9+16-1),"esp"));	# prefetched in BODY_00_15
+	#&movq	("mm7",&QWP(8*(9+16-1),"esp"));	# prefetched in BODY_00_15 
 	&movq	("mm5",&QWP(8*(9+16-14),"esp"));
 	&movq	("mm1","mm7");
 	&psrlq	("mm7",1);
@@ -669,7 +669,7 @@ sub BODY_00_15_ssse3 {		# "phase-less" copy of BODY_00_15_sse2
 	&movq	(&QWP(48,"esi"),"mm6");
 	&movq	(&QWP(56,"esi"),"mm7");
 
-	&cmp	("edi","eax")			# are we done yet?
+    	&cmp	("edi","eax")			# are we done yet?
 	&jb	(&label("loop_ssse3"));
 
 	&mov	("esp",&DWP(64+12,$frame));	# restore sp

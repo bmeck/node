@@ -32,7 +32,7 @@ SHA1_RE = re.compile('^[a-fA-F0-9]{40}$')
 ROLL_DEPS_GIT_SVN_ID_RE = re.compile('^git-svn-id: .*@([0-9]+) .*$')
 
 # Regular expression that matches a single commit footer line.
-COMMIT_FOOTER_ENTRY_RE = re.compile(r'([^:]+):\s+(.+)')
+COMMIT_FOOTER_ENTRY_RE = re.compile(r'([^:]+):\s*(.*)')
 
 # Footer metadata key for commit position.
 COMMIT_POSITION_FOOTER_KEY = 'Cr-Commit-Position'
@@ -67,9 +67,9 @@ def GetCommitMessageFooterMap(message):
   for line in lines:
     m = COMMIT_FOOTER_ENTRY_RE.match(line)
     if not m:
-      # If any single line isn't valid, the entire footer is invalid.
-      footers.clear()
-      return footers
+      # If any single line isn't valid, continue anyway for compatibility with
+      # Gerrit (which itself uses JGit for this).
+      continue
     footers[m.group(1)] = m.group(2).strip()
   return footers
 
@@ -163,7 +163,7 @@ class GitRecipesMixin(object):
 
   @Strip
   def GitLog(self, n=0, format="", grep="", git_hash="", parent_hash="",
-             branch="", reverse=False, **kwargs):
+             branch="", path=None, reverse=False, **kwargs):
     assert not (git_hash and parent_hash)
     args = ["log"]
     if n > 0:
@@ -179,7 +179,14 @@ class GitRecipesMixin(object):
     if parent_hash:
       args.append("%s^" % parent_hash)
     args.append(branch)
+    if path:
+      args.extend(["--", path])
     return self.Git(MakeArgs(args), **kwargs)
+
+  def GitShowFile(self, refspec, path, **kwargs):
+    assert refspec
+    assert path
+    return self.Git(MakeArgs(["show", "%s:%s" % (refspec, path)]), **kwargs)
 
   def GitGetPatch(self, git_hash, **kwargs):
     assert git_hash
@@ -199,7 +206,7 @@ class GitRecipesMixin(object):
     self.Git(MakeArgs(args), **kwargs)
 
   def GitUpload(self, reviewer="", author="", force=False, cq=False,
-                bypass_hooks=False, cc="", **kwargs):
+                bypass_hooks=False, cc="", use_gerrit=False, **kwargs):
     args = ["cl upload --send-mail"]
     if author:
       args += ["--email", Quoted(author)]
@@ -213,6 +220,8 @@ class GitRecipesMixin(object):
       args.append("--bypass-hooks")
     if cc:
       args += ["--cc", Quoted(cc)]
+    if use_gerrit:
+      args += ["--gerrit"]
     # TODO(machenbach): Check output in forced mode. Verify that all required
     # base files were uploaded, if not retry.
     self.Git(MakeArgs(args), pipe=False, **kwargs)
@@ -241,8 +250,8 @@ class GitRecipesMixin(object):
   def GitPull(self, **kwargs):
     self.Git("pull", **kwargs)
 
-  def GitFetchOrigin(self, **kwargs):
-    self.Git("fetch origin", **kwargs)
+  def GitFetchOrigin(self, *refspecs, **kwargs):
+    self.Git(MakeArgs(["fetch", "origin"] + list(refspecs)), **kwargs)
 
   @Strip
   # Copied from bot_update.py and modified for svn-like numbers only.
@@ -273,3 +282,6 @@ class GitRecipesMixin(object):
         return match.group(1)
     raise GitFailedException("Couldn't determine commit position for %s" %
                              git_hash)
+
+  def GitGetHashOfTag(self, tag_name, **kwargs):
+    return self.Git("rev-list -1 " + tag_name).strip().encode("ascii", "ignore")

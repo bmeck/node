@@ -592,6 +592,7 @@ _Same(_compile, 'UndefinePreprocessorDefinitions', _string_list)  # /U
 _Same(_compile, 'UseFullPaths', _boolean)  # /FC
 _Same(_compile, 'WholeProgramOptimization', _boolean)  # /GL
 _Same(_compile, 'XMLDocumentationFileName', _file_name)
+_Same(_compile, 'CompileAsWinRT', _boolean)  # /ZW
 
 _Same(_compile, 'AssemblerOutput',
       _Enumeration(['NoListing',
@@ -708,10 +709,7 @@ _MSVSOnly(_compile, 'UseUnicodeResponseFiles', _boolean)
 _MSBuildOnly(_compile, 'BuildingInIDE', _boolean)
 _MSBuildOnly(_compile, 'CompileAsManaged',
              _Enumeration([], new=['false',
-                                   'true',  # /clr
-                                   'Pure',  # /clr:pure
-                                   'Safe',  # /clr:safe
-                                   'OldSyntax']))  # /clr:oldSyntax
+                                   'true']))  # /clr
 _MSBuildOnly(_compile, 'CreateHotpatchableImage', _boolean)  # /hotpatch
 _MSBuildOnly(_compile, 'MultiProcessorCompilation', _boolean)  # /MP
 _MSBuildOnly(_compile, 'PreprocessOutputPath', _string)  # /Fi

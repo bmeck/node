@@ -32,34 +32,6 @@ void Malloced::Delete(void* p) {
 }
 
 
-#ifdef DEBUG
-
-static void* invalid = static_cast<void*>(NULL);
-
-void* Embedded::operator new(size_t size) {
-  UNREACHABLE();
-  return invalid;
-}
-
-
-void Embedded::operator delete(void* p) {
-  UNREACHABLE();
-}
-
-
-void* AllStatic::operator new(size_t size) {
-  UNREACHABLE();
-  return invalid;
-}
-
-
-void AllStatic::operator delete(void* p) {
-  UNREACHABLE();
-}
-
-#endif
-
-
 char* StrDup(const char* str) {
   int length = StrLength(str);
   char* result = NewArray<char>(length + 1);
@@ -108,4 +80,5 @@ void AlignedFree(void *ptr) {
 #endif
 }
 
-} }  // namespace v8::internal
+}  // namespace internal
+}  // namespace v8

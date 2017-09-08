@@ -107,7 +107,7 @@ if (!$avx && $win64 && ($flavour =~ /masm/ || $ENV{ASM} =~ /ml64/) &&
 	$avx = ($1>=10) + ($1>=11);
 }
 
-if (!$avx && `$ENV{CC} -v 2>&1` =~ /(^clang version|based on LLVM) ([2-9]\.[0-9]+)/) {
+if (!$avx && `$ENV{CC} -v 2>&1` =~ /((?:^clang|LLVM) version|.*based on LLVM) ([2-9]\.[0-9]+)/) {
 	$avx = ($2>=3.0) + ($2>3.0);
 }
 
@@ -254,7 +254,7 @@ sha1_block_data_order:
 	jz	.Lialu
 ___
 $code.=<<___ if ($shaext);
-	test	\$`1<<29`,%r10d		# check SHA bit
+	test	\$`1<<29`,%r10d		# check SHA bit	
 	jnz	_shaext_shortcut
 ___
 $code.=<<___ if ($avx>1);
@@ -372,9 +372,9 @@ $code.=<<___;
 .align	16
 .Loop_shaext:
 	dec		$num
-	lea		0x40($inp),%rax		# next input block
+	lea		0x40($inp),%r8		# next input block
 	paddd		@MSG[0],$E
-	cmovne		%rax,$inp
+	cmovne		%r8,$inp
 	movdqa		$ABCD,$ABCD_SAVE	# offload $ABCD
 ___
 for($i=0;$i<20-4;$i+=2) {
@@ -2039,7 +2039,7 @@ sub sha1op38 {
     my $instr = shift;
     my %opcodelet = (
 		"sha1nexte" => 0xc8,
-		"sha1msg1"  => 0xc9,
+  		"sha1msg1"  => 0xc9,
 		"sha1msg2"  => 0xca	);
 
     if (defined($opcodelet{$instr}) && @_[0] =~ /%xmm([0-9]+),\s*%xmm([0-9]+)/) {

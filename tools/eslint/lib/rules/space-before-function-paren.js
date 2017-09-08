@@ -1,117 +1,142 @@
 /**
  * @fileoverview Rule to validate spacing before function paren.
  * @author Mathias Schreck <https://github.com/lo1tuma>
- * @copyright 2015 Mathias Schreck
  */
 "use strict";
+
+//------------------------------------------------------------------------------
+// Requirements
+//------------------------------------------------------------------------------
+
+const astUtils = require("../ast-utils");
 
 //------------------------------------------------------------------------------
 // Rule Definition
 //------------------------------------------------------------------------------
 
-module.exports = function(context) {
+module.exports = {
+    meta: {
+        docs: {
+            description: "enforce consistent spacing before `function` definition opening parenthesis",
+            category: "Stylistic Issues",
+            recommended: false
+        },
 
-    var configuration = context.options[0],
-        requireAnonymousFunctionSpacing = true,
-        requireNamedFunctionSpacing = true;
+        fixable: "whitespace",
 
-    if (typeof configuration === "object") {
-        requireAnonymousFunctionSpacing = configuration.anonymous !== "never";
-        requireNamedFunctionSpacing = configuration.named !== "never";
-    } else if (configuration === "never") {
-        requireAnonymousFunctionSpacing = false;
-        requireNamedFunctionSpacing = false;
-    }
+        schema: [
+            {
+                oneOf: [
+                    {
+                        enum: ["always", "never"]
+                    },
+                    {
+                        type: "object",
+                        properties: {
+                            anonymous: {
+                                enum: ["always", "never", "ignore"]
+                            },
+                            named: {
+                                enum: ["always", "never", "ignore"]
+                            },
+                            asyncArrow: {
+                                enum: ["always", "never", "ignore"]
+                            }
+                        },
+                        additionalProperties: false
+                    }
+                ]
+            }
+        ]
+    },
 
-    /**
-     * Determines whether two adjacent tokens are have whitespace between them.
-     * @param {Object} left - The left token object.
-     * @param {Object} right - The right token object.
-     * @returns {boolean} Whether or not there is space between the tokens.
-     */
-    function isSpaced(left, right) {
-        return left.range[1] < right.range[0];
-    }
+    create(context) {
+        const sourceCode = context.getSourceCode();
+        const baseConfig = typeof context.options[0] === "string" ? context.options[0] : "always";
+        const overrideConfig = typeof context.options[0] === "object" ? context.options[0] : {};
 
-    /**
-     * Determines whether a function has a name.
-     * @param {ASTNode} node The function node.
-     * @returns {boolean} Whether the function has a name.
-     */
-    function isNamedFunction(node) {
-        var parent;
-
-        if (node.id) {
-            return true;
-        }
-
-        parent = context.getAncestors().pop();
-        return parent.type === "MethodDefinition" ||
-            (parent.type === "Property" &&
-                (
-                    parent.kind === "get" ||
-                    parent.kind === "set" ||
-                    parent.method
-                )
-            );
-    }
-
-    /**
-     * Validates the spacing before function parentheses.
-     * @param {ASTNode} node The node to be validated.
-     * @returns {void}
-     */
-    function validateSpacingBeforeParentheses(node) {
-        var isNamed = isNamedFunction(node),
-            tokens,
-            leftToken,
-            rightToken,
-            location;
-
-        if (node.generator && !isNamed) {
-            return;
-        }
-
-        tokens = context.getTokens(node);
-
-        if (node.generator) {
+        /**
+         * Determines whether a function has a name.
+         * @param {ASTNode} node The function node.
+         * @returns {boolean} Whether the function has a name.
+         */
+        function isNamedFunction(node) {
             if (node.id) {
-                leftToken = tokens[2];
-                rightToken = tokens[3];
-            } else {
-                // Object methods are named but don't have an id
-                leftToken = context.getTokenBefore(node);
-                rightToken = tokens[0];
+                return true;
             }
-        } else if (isNamed) {
-            if (node.id) {
-                leftToken = tokens[1];
-                rightToken = tokens[2];
-            } else {
-                // Object methods are named but don't have an id
-                leftToken = context.getTokenBefore(node);
-                rightToken = tokens[0];
-            }
-        } else {
-            leftToken = tokens[0];
-            rightToken = tokens[1];
+
+            const parent = node.parent;
+
+            return parent.type === "MethodDefinition" ||
+                (parent.type === "Property" &&
+                    (
+                        parent.kind === "get" ||
+                        parent.kind === "set" ||
+                        parent.method
+                    )
+                );
         }
 
-        location = leftToken.loc.end;
+        /**
+         * Gets the config for a given function
+         * @param {ASTNode} node The function node
+         * @returns {string} "always", "never", or "ignore"
+         */
+        function getConfigForFunction(node) {
+            if (node.type === "ArrowFunctionExpression") {
 
-        if (isSpaced(leftToken, rightToken)) {
-            if ((isNamed && !requireNamedFunctionSpacing) || (!isNamed && !requireAnonymousFunctionSpacing)) {
-                context.report(node, location, "Unexpected space before function parentheses.");
+                // Always ignore non-async functions and arrow functions without parens, e.g. async foo => bar
+                if (node.async && astUtils.isOpeningParenToken(sourceCode.getFirstToken(node, { skip: 1 }))) {
+                    return overrideConfig.asyncArrow || baseConfig;
+                }
+            } else if (isNamedFunction(node)) {
+                return overrideConfig.named || baseConfig;
+
+            // `generator-star-spacing` should warn anonymous generators. E.g. `function* () {}`
+            } else if (!node.generator) {
+                return overrideConfig.anonymous || baseConfig;
             }
-        } else {
-            if ((isNamed && requireNamedFunctionSpacing) || (!isNamed && requireAnonymousFunctionSpacing)) {
-                context.report(node, location, "Missing space before function parentheses.");
+
+            return "ignore";
+        }
+
+        /**
+         * Checks the parens of a function node
+         * @param {ASTNode} node A function node
+         * @returns {void}
+         */
+        function checkFunction(node) {
+            const functionConfig = getConfigForFunction(node);
+
+            if (functionConfig === "ignore") {
+                return;
+            }
+
+            const rightToken = sourceCode.getFirstToken(node, astUtils.isOpeningParenToken);
+            const leftToken = sourceCode.getTokenBefore(rightToken);
+            const hasSpacing = sourceCode.isSpaceBetweenTokens(leftToken, rightToken);
+
+            if (hasSpacing && functionConfig === "never") {
+                context.report({
+                    node,
+                    loc: leftToken.loc.end,
+                    message: "Unexpected space before function parentheses.",
+                    fix: fixer => fixer.removeRange([leftToken.range[1], rightToken.range[0]])
+                });
+            } else if (!hasSpacing && functionConfig === "always") {
+                context.report({
+                    node,
+                    loc: leftToken.loc.end,
+                    message: "Missing space before function parentheses.",
+                    fix: fixer => fixer.insertTextAfter(leftToken, " ")
+                });
             }
         }
+
+        return {
+            ArrowFunctionExpression: checkFunction,
+            FunctionDeclaration: checkFunction,
+            FunctionExpression: checkFunction
+        };
     }
-
-    return {
-        "FunctionDeclaration": validateSpacingBeforeParentheses,
-        "FunctionExpression": validateSpacingBeforeParentheses
-    };
 };

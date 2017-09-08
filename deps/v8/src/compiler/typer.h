@@ -6,67 +6,60 @@
 #define V8_COMPILER_TYPER_H_
 
 #include "src/compiler/graph.h"
-#include "src/compiler/opcodes.h"
-#include "src/types.h"
+#include "src/compiler/operation-typer.h"
+#include "src/globals.h"
 
 namespace v8 {
 namespace internal {
 namespace compiler {
 
 // Forward declarations.
-class LazyTypeCache;
+class LoopVariableOptimizer;
 
-
-class Typer {
+class V8_EXPORT_PRIVATE Typer {
  public:
-  Typer(Isolate* isolate, Graph* graph, MaybeHandle<Context> context);
+  enum Flag : uint8_t {
+    kNoFlags = 0,
+    kThisIsReceiver = 1u << 0,       // Parameter this is an Object.
+    kNewTargetIsReceiver = 1u << 1,  // Parameter new.target is an Object.
+  };
+  typedef base::Flags<Flag> Flags;
+
+  Typer(Isolate* isolate, Flags flags, Graph* graph);
   ~Typer();
 
   void Run();
-
-  Graph* graph() { return graph_; }
-  MaybeHandle<Context> context() { return context_; }
-  Zone* zone() { return graph_->zone(); }
-  Isolate* isolate() { return isolate_; }
+  // TODO(bmeurer,jarin): Remove this once we have a notion of "roots" on Graph.
+  void Run(const ZoneVector<Node*>& roots,
+           LoopVariableOptimizer* induction_vars);
 
  private:
   class Visitor;
   class Decorator;
 
-  Isolate* isolate_;
-  Graph* graph_;
-  MaybeHandle<Context> context_;
+  Flags flags() const { return flags_; }
+  Graph* graph() const { return graph_; }
+  Zone* zone() const { return graph()->zone(); }
+  Isolate* isolate() const { return isolate_; }
+  OperationTyper* operation_typer() { return &operation_typer_; }
+
+  Isolate* const isolate_;
+  Flags const flags_;
+  Graph* const graph_;
   Decorator* decorator_;
+  TypeCache const& cache_;
+  OperationTyper operation_typer_;
 
-  Zone* zone_;
-  Type* boolean_or_number;
-  Type* undefined_or_null;
-  Type* undefined_or_number;
-  Type* negative_signed32;
-  Type* non_negative_signed32;
-  Type* singleton_false;
-  Type* singleton_true;
-  Type* singleton_zero;
-  Type* singleton_one;
-  Type* zero_or_one;
-  Type* zeroish;
-  Type* signed32ish;
-  Type* unsigned32ish;
-  Type* falsish;
-  Type* truish;
-  Type* integer;
-  Type* weakint;
-  Type* number_fun0_;
-  Type* number_fun1_;
-  Type* number_fun2_;
-  Type* weakint_fun1_;
-  Type* random_fun_;
-  LazyTypeCache* cache_;
+  Type* singleton_empty_string_;
+  Type* singleton_false_;
+  Type* singleton_true_;
+  Type* falsish_;
+  Type* truish_;
 
-  ZoneVector<double> weaken_min_limits_;
-  ZoneVector<double> weaken_max_limits_;
   DISALLOW_COPY_AND_ASSIGN(Typer);
 };
+
+DEFINE_OPERATORS_FOR_FLAGS(Typer::Flags);
 
 }  // namespace compiler
 }  // namespace internal

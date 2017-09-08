@@ -1,3 +1,24 @@
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 #include "stream_wrap.h"
 #include "stream_base.h"
 #include "stream_base-inl.h"
@@ -22,42 +43,44 @@
 
 namespace node {
 
-using v8::Array;
 using v8::Context;
 using v8::EscapableHandleScope;
 using v8::FunctionCallbackInfo;
 using v8::FunctionTemplate;
-using v8::Handle;
 using v8::HandleScope;
 using v8::Integer;
 using v8::Local;
-using v8::Number;
 using v8::Object;
-using v8::PropertyCallbackInfo;
-using v8::String;
-using v8::True;
-using v8::Undefined;
 using v8::Value;
 
 
-void StreamWrap::Initialize(Handle<Object> target,
-                            Handle<Value> unused,
-                            Handle<Context> context) {
+void StreamWrap::Initialize(Local<Object> target,
+                            Local<Value> unused,
+                            Local<Context> context) {
   Environment* env = Environment::GetCurrent(context);
 
+  auto is_construct_call_callback =
+      [](const FunctionCallbackInfo<Value>& args) {
+    CHECK(args.IsConstructCall());
+    ClearWrap(args.This());
+  };
   Local<FunctionTemplate> sw =
-      FunctionTemplate::New(env->isolate(), ShutdownWrap::NewShutdownWrap);
+      FunctionTemplate::New(env->isolate(), is_construct_call_callback);
   sw->InstanceTemplate()->SetInternalFieldCount(1);
-  sw->SetClassName(FIXED_ONE_BYTE_STRING(env->isolate(), "ShutdownWrap"));
-  target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "ShutdownWrap"),
-              sw->GetFunction());
+  Local<String> wrapString =
+      FIXED_ONE_BYTE_STRING(env->isolate(), "ShutdownWrap");
+  sw->SetClassName(wrapString);
+  AsyncWrap::AddWrapMethods(env, sw);
+  target->Set(wrapString, sw->GetFunction());
 
   Local<FunctionTemplate> ww =
-      FunctionTemplate::New(env->isolate(), WriteWrap::NewWriteWrap);
+      FunctionTemplate::New(env->isolate(), is_construct_call_callback);
   ww->InstanceTemplate()->SetInternalFieldCount(1);
-  ww->SetClassName(FIXED_ONE_BYTE_STRING(env->isolate(), "WriteWrap"));
-  target->Set(FIXED_ONE_BYTE_STRING(env->isolate(), "WriteWrap"),
-              ww->GetFunction());
+  Local<String> writeWrapString =
+      FIXED_ONE_BYTE_STRING(env->isolate(), "WriteWrap");
+  ww->SetClassName(writeWrapString);
+  AsyncWrap::AddWrapMethods(env, ww);
+  target->Set(writeWrapString, ww->GetFunction());
   env->set_write_wrap_constructor_function(ww->GetFunction());
 }
 
@@ -65,23 +88,21 @@ void StreamWrap::Initialize(Handle<Object> target,
 StreamWrap::StreamWrap(Environment* env,
                        Local<Object> object,
                        uv_stream_t* stream,
-                       AsyncWrap::ProviderType provider,
-                       AsyncWrap* parent)
+                       AsyncWrap::ProviderType provider)
     : HandleWrap(env,
                  object,
                  reinterpret_cast<uv_handle_t*>(stream),
-                 provider,
-                 parent),
+                 provider),
       StreamBase(env),
       stream_(stream) {
-  set_after_write_cb(OnAfterWriteImpl, this);
-  set_alloc_cb(OnAllocImpl, this);
-  set_read_cb(OnReadImpl, this);
+  set_after_write_cb({ OnAfterWriteImpl, this });
+  set_alloc_cb({ OnAllocImpl, this });
+  set_read_cb({ OnReadImpl, this });
 }
 
 
 void StreamWrap::AddMethods(Environment* env,
-                            v8::Handle<v8::FunctionTemplate> target,
+                            v8::Local<v8::FunctionTemplate> target,
                             int flags) {
   env->SetProtoMethod(target, "setBlocking", SetBlocking);
   StreamBase::AddMethods<StreamWrap>(env, target, flags);
@@ -92,7 +113,7 @@ int StreamWrap::GetFD() {
   int fd = -1;
 #if !defined(_WIN32)
   if (stream() != nullptr)
-    fd = stream()->io_watcher.fd;
+    uv_fileno(reinterpret_cast<uv_handle_t*>(stream()), &fd);
 #endif
   return fd;
 }
@@ -155,14 +176,8 @@ void StreamWrap::OnAlloc(uv_handle_t* handle,
 
 
 void StreamWrap::OnAllocImpl(size_t size, uv_buf_t* buf, void* ctx) {
-  buf->base = static_cast<char*>(malloc(size));
+  buf->base = node::Malloc(size);
   buf->len = size;
-
-  if (buf->base == nullptr && size > 0) {
-    FatalError(
-        "node::StreamWrap::DoAlloc(size_t, uv_buf_t*, void*)",
-        "Out Of Memory");
-  }
 }
 
 
@@ -176,11 +191,12 @@ static Local<Object> AcceptHandle(Environment* env, StreamWrap* parent) {
   if (wrap_obj.IsEmpty())
     return Local<Object>();
 
-  WrapType* wrap = Unwrap<WrapType>(wrap_obj);
+  WrapType* wrap;
+  ASSIGN_OR_RETURN_UNWRAP(&wrap, wrap_obj, Local<Object>());
   handle = wrap->UVHandle();
 
   if (uv_accept(parent->stream(), reinterpret_cast<uv_stream_t*>(handle)))
-    abort();
+    ABORT();
 
   return scope.Escape(wrap_obj);
 }
@@ -210,8 +226,8 @@ void StreamWrap::OnReadImpl(ssize_t nread,
     return;
   }
 
-  char* base = static_cast<char*>(realloc(buf->base, nread));
   CHECK_LE(static_cast<size_t>(nread), buf->len);
+  char* base = node::Realloc(buf->base, nread);
 
   if (pending == UV_TCP) {
     pending_obj = AcceptHandle<TCPWrap, uv_tcp_t>(env, wrap);
@@ -223,17 +239,23 @@ void StreamWrap::OnReadImpl(ssize_t nread,
     CHECK_EQ(pending, UV_UNKNOWN_HANDLE);
   }
 
-  wrap->EmitData(nread, Buffer::Use(env, base, nread), pending_obj);
+  Local<Object> obj = Buffer::New(env, base, nread).ToLocalChecked();
+  wrap->EmitData(nread, obj, pending_obj);
 }
 
 
-void StreamWrap::OnReadCommon(uv_stream_t* handle,
-                              ssize_t nread,
-                              const uv_buf_t* buf,
-                              uv_handle_type pending) {
+void StreamWrap::OnRead(uv_stream_t* handle,
+                        ssize_t nread,
+                        const uv_buf_t* buf) {
   StreamWrap* wrap = static_cast<StreamWrap*>(handle->data);
   HandleScope scope(wrap->env()->isolate());
   Context::Scope context_scope(wrap->env()->context());
+  uv_handle_type type = UV_UNKNOWN_HANDLE;
+
+  if (wrap->is_named_pipe_ipc() &&
+      uv_pipe_pending_count(reinterpret_cast<uv_pipe_t*>(handle)) > 0) {
+    type = uv_pipe_pending_type(reinterpret_cast<uv_pipe_t*>(handle));
+  }
 
   // We should not be getting this callback if someone as already called
   // uv_close() on the handle.
@@ -247,27 +269,13 @@ void StreamWrap::OnReadCommon(uv_stream_t* handle,
     }
   }
 
-  static_cast<StreamBase*>(wrap)->OnRead(nread, buf, pending);
-}
-
-
-void StreamWrap::OnRead(uv_stream_t* handle,
-                        ssize_t nread,
-                        const uv_buf_t* buf) {
-  StreamWrap* wrap = static_cast<StreamWrap*>(handle->data);
-  uv_handle_type type = UV_UNKNOWN_HANDLE;
-
-  if (wrap->is_named_pipe_ipc() &&
-      uv_pipe_pending_count(reinterpret_cast<uv_pipe_t*>(handle)) > 0) {
-    type = uv_pipe_pending_type(reinterpret_cast<uv_pipe_t*>(handle));
-  }
-
-  OnReadCommon(handle, nread, buf, type);
+  static_cast<StreamBase*>(wrap)->OnRead(nread, buf, type);
 }
 
 
 void StreamWrap::SetBlocking(const FunctionCallbackInfo<Value>& args) {
-  StreamWrap* wrap = Unwrap<StreamWrap>(args.Holder());
+  StreamWrap* wrap;
+  ASSIGN_OR_RETURN_UNWRAP(&wrap, args.Holder());
 
   CHECK_GT(args.Length(), 0);
   if (!wrap->IsAlive())
@@ -280,14 +288,15 @@ void StreamWrap::SetBlocking(const FunctionCallbackInfo<Value>& args) {
 
 int StreamWrap::DoShutdown(ShutdownWrap* req_wrap) {
   int err;
-  err = uv_shutdown(&req_wrap->req_, stream(), AfterShutdown);
+  err = uv_shutdown(req_wrap->req(), stream(), AfterShutdown);
   req_wrap->Dispatched();
   return err;
 }
 
 
 void StreamWrap::AfterShutdown(uv_shutdown_t* req, int status) {
-  ShutdownWrap* req_wrap = ContainerOf(&ShutdownWrap::req_, req);
+  ShutdownWrap* req_wrap = ShutdownWrap::from_req(req);
+  CHECK_NE(req_wrap, nullptr);
   HandleScope scope(req_wrap->env()->isolate());
   Context::Scope context_scope(req_wrap->env()->context());
   req_wrap->Done(status);
@@ -313,7 +322,7 @@ int StreamWrap::DoTryWrite(uv_buf_t** bufs, size_t* count) {
   // Slice off the buffers: skip all written buffers and slice the one that
   // was partially written.
   written = err;
-  for (; written != 0 && vcount > 0; vbufs++, vcount--) {
+  for (; vcount > 0; vbufs++, vcount--) {
     // Slice
     if (vbufs[0].len > written) {
       vbufs[0].base += written;
@@ -340,9 +349,9 @@ int StreamWrap::DoWrite(WriteWrap* w,
                         uv_stream_t* send_handle) {
   int r;
   if (send_handle == nullptr) {
-    r = uv_write(&w->req_, stream(), bufs, count, AfterWrite);
+    r = uv_write(w->req(), stream(), bufs, count, AfterWrite);
   } else {
-    r = uv_write2(&w->req_, stream(), bufs, count, send_handle, AfterWrite);
+    r = uv_write2(w->req(), stream(), bufs, count, send_handle, AfterWrite);
   }
 
   if (!r) {
@@ -364,7 +373,8 @@ int StreamWrap::DoWrite(WriteWrap* w,
 
 
 void StreamWrap::AfterWrite(uv_write_t* req, int status) {
-  WriteWrap* req_wrap = ContainerOf(&WriteWrap::req_, req);
+  WriteWrap* req_wrap = WriteWrap::from_req(req);
+  CHECK_NE(req_wrap, nullptr);
   HandleScope scope(req_wrap->env()->isolate());
   Context::Scope context_scope(req_wrap->env()->context());
   req_wrap->Done(status);

@@ -2,15 +2,15 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
 #include <sstream>
-
-#include "src/v8.h"
 
 #include "src/compiler/operator.h"
 #include "test/cctest/cctest.h"
 
-using namespace v8::internal;
-using namespace v8::internal::compiler;
+namespace v8 {
+namespace internal {
+namespace compiler {
 
 #define NONE Operator::kNoProperties
 #define FOLD Operator::kFoldable
@@ -68,11 +68,10 @@ TEST(TestOperator_Equals) {
   CHECK(!op2b.Equals(&op1b));
 }
 
-
-static SmartArrayPointer<const char> OperatorToString(Operator* op) {
+static std::unique_ptr<char[]> OperatorToString(Operator* op) {
   std::ostringstream os;
   os << *op;
-  return SmartArrayPointer<const char>(StrDup(os.str().c_str()));
+  return std::unique_ptr<char[]>(StrDup(os.str().c_str()));
 }
 
 
@@ -281,3 +280,7 @@ TEST(Operator_CountsOrder) {
   CHECK_EQ(55, op.EffectOutputCount());
   CHECK_EQ(66, op.ControlOutputCount());
 }
+
+}  // namespace compiler
+}  // namespace internal
+}  // namespace v8

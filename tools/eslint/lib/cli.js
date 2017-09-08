@@ -15,20 +15,29 @@
 // Requirements
 //------------------------------------------------------------------------------
 
-var fs = require("fs"),
+const fs = require("fs"),
     path = require("path"),
-
-    debug = require("debug"),
-
     options = require("./options"),
     CLIEngine = require("./cli-engine"),
-    mkdirp = require("mkdirp");
+    mkdirp = require("mkdirp"),
+    log = require("./logging");
+
+const debug = require("debug")("eslint:cli");
 
 //------------------------------------------------------------------------------
 // Helpers
 //------------------------------------------------------------------------------
 
-debug = debug("eslint:cli");
+/**
+ * Predicate function for whether or not to apply fixes in quiet mode.
+ * If a message is a warning, do not apply a fix.
+ * @param {LintResult} lintResult The lint result.
+ * @returns {boolean} True if the lint message is an error (and thus should be
+ * autofixed), false otherwise.
+ */
+function quietFixPredicate(lintResult) {
+    return lintResult.severity === 2;
+}
 
 /**
  * Translates the CLI options into the options expected by the CLIEngine.
@@ -45,10 +54,17 @@ function translateOptions(cliOptions) {
         globals: cliOptions.global,
         ignore: cliOptions.ignore,
         ignorePath: cliOptions.ignorePath,
+        ignorePattern: cliOptions.ignorePattern,
         configFile: cliOptions.config,
         rulePaths: cliOptions.rulesdir,
-        reset: cliOptions.reset,
-        useEslintrc: cliOptions.eslintrc
+        useEslintrc: cliOptions.eslintrc,
+        parser: cliOptions.parser,
+        parserOptions: cliOptions.parserOptions,
+        cache: cliOptions.cache,
+        cacheFile: cliOptions.cacheFile,
+        cacheLocation: cliOptions.cacheLocation,
+        fix: cliOptions.fix && (cliOptions.quiet ? quietFixPredicate : true),
+        allowInlineConfig: cliOptions.inlineConfig
     };
 }
 
@@ -62,24 +78,23 @@ function translateOptions(cliOptions) {
  * @private
  */
 function printResults(engine, results, format, outputFile) {
-    var formatter,
-        output,
-        filePath;
+    let formatter;
 
-    formatter = engine.getFormatter(format);
-    if (!formatter) {
-        console.error("Could not find formatter '%s'.", format);
+    try {
+        formatter = engine.getFormatter(format);
+    } catch (e) {
+        log.error(e.message);
         return false;
     }
 
-    output = formatter(results);
+    const output = formatter(results);
 
     if (output) {
         if (outputFile) {
-            filePath = path.resolve(process.cwd(), outputFile);
+            const filePath = path.resolve(process.cwd(), outputFile);
 
             if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
-                console.error("Cannot write to output file path, it is a directory: %s", outputFile);
+                log.error("Cannot write to output file path, it is a directory: %s", outputFile);
                 return false;
             }
 
@@ -87,47 +102,16 @@ function printResults(engine, results, format, outputFile) {
                 mkdirp.sync(path.dirname(filePath));
                 fs.writeFileSync(filePath, output);
             } catch (ex) {
-                console.error("There was a problem writing the output file:\n%s", ex);
+                log.error("There was a problem writing the output file:\n%s", ex);
                 return false;
             }
         } else {
-            console.log(output);
+            log.info(output);
         }
     }
 
     return true;
 
-}
-
-/**
- * Checks if the given message is an error message.
- * @param {object} message The message to check.
- * @returns {boolean} Whether or not the message is an error message.
- */
-function isErrorMessage(message) {
-    return message.severity === 2;
-}
-
-/**
- * Returns results that only contains errors.
- * @param {LintResult[]} results The results to filter.
- * @returns {LintResult[]} The filtered results.
- */
-function getErrorResults(results) {
-    var filtered = [];
-
-    results.forEach(function (result) {
-        var filteredMessages = result.messages.filter(isErrorMessage);
-
-        if (filteredMessages.length > 0) {
-            filtered.push({
-                filePath: result.filePath,
-                messages: filteredMessages
-            });
-        }
-    });
-
-    return filtered;
 }
 
 //------------------------------------------------------------------------------
@@ -138,7 +122,7 @@ function getErrorResults(results) {
  * Encapsulates all CLI behavior for eslint. Makes it easier to test as well as
  * for other Node.js programs to effectively run the CLI.
  */
-var cli = {
+const cli = {
 
     /**
      * Executes the CLI based on an array of arguments that is passed in.
@@ -146,45 +130,77 @@ var cli = {
      * @param {string} [text] The text to lint (used for TTY).
      * @returns {int} The exit code for the operation.
      */
-    execute: function(args, text) {
+    execute(args, text) {
 
-        var currentOptions,
-            files,
-            result,
-            engine;
+        let currentOptions;
 
         try {
             currentOptions = options.parse(args);
         } catch (error) {
-            console.error(error.message);
+            log.error(error.message);
             return 1;
         }
 
-        files = currentOptions._;
+        const files = currentOptions._;
 
         if (currentOptions.version) { // version from package.json
 
-            console.log("v" + require("../package.json").version);
+            log.info(`v${require("../package.json").version}`);
 
+        } else if (currentOptions.printConfig) {
+            if (files.length) {
+                log.error("The --print-config option must be used with exactly one file name.");
+                return 1;
+            } else if (text) {
+                log.error("The --print-config option is not available for piped-in code.");
+                return 1;
+            }
+
+            const engine = new CLIEngine(translateOptions(currentOptions));
+
+            const fileConfig = engine.getConfigForFile(currentOptions.printConfig);
+
+            log.info(JSON.stringify(fileConfig, null, "  "));
+            return 0;
         } else if (currentOptions.help || (!files.length && !text)) {
 
-            console.log(options.generateHelp());
+            log.info(options.generateHelp());
 
         } else {
 
-            engine = new CLIEngine(translateOptions(currentOptions));
-            debug("Running on " + (text ? "text" : "files"));
+            debug(`Running on ${text ? "text" : "files"}`);
 
-            result = text ? engine.executeOnText(text, currentOptions.stdinFilename) : engine.executeOnFiles(files);
-            if (currentOptions.quiet) {
-                result.results = getErrorResults(result.results);
-            }
-
-            if (printResults(engine, result.results, currentOptions.format, currentOptions.outputFile)) {
-                return result.errorCount ? 1 : 0;
-            } else {
+            // disable --fix for piped-in code until we know how to do it correctly
+            if (text && currentOptions.fix) {
+                log.error("The --fix option is not available for piped-in code.");
                 return 1;
             }
+
+            const engine = new CLIEngine(translateOptions(currentOptions));
+
+            const report = text ? engine.executeOnText(text, currentOptions.stdinFilename, true) : engine.executeOnFiles(files);
+
+            if (currentOptions.fix) {
+                debug("Fix mode enabled - applying fixes");
+                CLIEngine.outputFixes(report);
+            }
+
+            if (currentOptions.quiet) {
+                debug("Quiet mode enabled - filtering out warnings");
+                report.results = CLIEngine.getErrorResults(report.results);
+            }
+
+            if (printResults(engine, report.results, currentOptions.format, currentOptions.outputFile)) {
+                const tooManyWarnings = currentOptions.maxWarnings >= 0 && report.warningCount > currentOptions.maxWarnings;
+
+                if (!report.errorCount && tooManyWarnings) {
+                    log.error("ESLint found too many warnings (maximum: %s).", currentOptions.maxWarnings);
+                }
+
+                return (report.errorCount || tooManyWarnings) ? 1 : 0;
+            }
+            return 1;
+
 
         }
 

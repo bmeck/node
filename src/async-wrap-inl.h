@@ -1,5 +1,28 @@
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 #ifndef SRC_ASYNC_WRAP_INL_H_
 #define SRC_ASYNC_WRAP_INL_H_
+
+#if defined(NODE_WANT_INTERNALS) && NODE_WANT_INTERNALS
 
 #include "async-wrap.h"
 #include "base-object.h"
@@ -13,66 +36,42 @@
 
 namespace node {
 
-inline AsyncWrap::AsyncWrap(Environment* env,
-                            v8::Handle<v8::Object> object,
-                            ProviderType provider,
-                            AsyncWrap* parent)
-    : BaseObject(env, object, provider),
-      bits_(static_cast<uint32_t>(provider) << 1) {
-  // Check user controlled flag to see if the init callback should run.
-  if (!env->using_asyncwrap())
-    return;
-
-  // If callback hooks have not been enabled, and there is no parent, return.
-  if (!env->async_wrap_callbacks_enabled() && parent == nullptr)
-    return;
-
-  // If callback hooks have not been enabled and parent has no queue, return.
-  if (!env->async_wrap_callbacks_enabled() && !parent->has_async_queue())
-    return;
-
-  v8::HandleScope scope(env->isolate());
-  v8::TryCatch try_catch;
-
-  v8::Local<v8::Value> n = v8::Int32::New(env->isolate(), provider);
-  env->async_hooks_init_function()->Call(object, 1, &n);
-
-  if (try_catch.HasCaught())
-    FatalError("node::AsyncWrap::AsyncWrap", "init hook threw");
-
-  bits_ |= 1;  // has_async_queue() is true now.
-}
-
-
-inline bool AsyncWrap::has_async_queue() const {
-  return static_cast<bool>(bits_ & 1);
-}
-
-
 inline AsyncWrap::ProviderType AsyncWrap::provider_type() const {
-  return static_cast<ProviderType>(bits_ >> 1);
+  return provider_type_;
 }
 
 
-inline v8::Handle<v8::Value> AsyncWrap::MakeCallback(
-    const v8::Handle<v8::String> symbol,
+inline double AsyncWrap::get_id() const {
+  return async_id_;
+}
+
+
+inline double AsyncWrap::get_trigger_id() const {
+  return trigger_id_;
+}
+
+
+inline v8::MaybeLocal<v8::Value> AsyncWrap::MakeCallback(
+    const v8::Local<v8::String> symbol,
     int argc,
-    v8::Handle<v8::Value>* argv) {
+    v8::Local<v8::Value>* argv) {
   v8::Local<v8::Value> cb_v = object()->Get(symbol);
   CHECK(cb_v->IsFunction());
   return MakeCallback(cb_v.As<v8::Function>(), argc, argv);
 }
 
 
-inline v8::Handle<v8::Value> AsyncWrap::MakeCallback(
+inline v8::MaybeLocal<v8::Value> AsyncWrap::MakeCallback(
     uint32_t index,
     int argc,
-    v8::Handle<v8::Value>* argv) {
+    v8::Local<v8::Value>* argv) {
   v8::Local<v8::Value> cb_v = object()->Get(index);
   CHECK(cb_v->IsFunction());
   return MakeCallback(cb_v.As<v8::Function>(), argc, argv);
 }
 
 }  // namespace node
+
+#endif  // defined(NODE_WANT_INTERNALS) && NODE_WANT_INTERNALS
 
 #endif  // SRC_ASYNC_WRAP_INL_H_

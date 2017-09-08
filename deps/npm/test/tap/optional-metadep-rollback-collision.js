@@ -10,7 +10,7 @@ var common = require('../common-tap.js')
 
 var pkg = path.resolve(__dirname, 'optional-metadep-rollback-collision')
 var deps = path.resolve(pkg, 'deps')
-var nm = path.resolve(pkg, 'node_modules')
+var opdep = path.resolve(pkg, 'node_modules', 'opdep')
 var cache = path.resolve(pkg, 'cache')
 var pidfile = path.resolve(pkg, 'child.pid')
 
@@ -49,7 +49,7 @@ var d2 = {
   }
 }
 
-var opdep = {
+var opdep_json = {
   name: 'opdep',
   version: '1.0.0',
   description: 'To explode, of course!',
@@ -63,89 +63,7 @@ var opdep = {
   }
 }
 
-test('setup', function (t) {
-  cleanup()
-
-  mkdirp.sync(pkg)
-  fs.writeFileSync(
-    path.join(pkg, 'package.json'),
-    JSON.stringify(json, null, 2)
-  )
-
-  mkdirp.sync(path.join(deps, 'd1'))
-  fs.writeFileSync(
-    path.join(deps, 'd1', 'package.json'),
-    JSON.stringify(d1, null, 2)
-  )
-
-  mkdirp.sync(path.join(deps, 'd2'))
-  fs.writeFileSync(
-    path.join(deps, 'd2', 'package.json'),
-    JSON.stringify(d2, null, 2)
-  )
-  fs.writeFileSync(path.join(deps, 'd2', 'blart.js'), blart)
-
-  mkdirp.sync(path.join(deps, 'opdep'))
-  fs.writeFileSync(
-    path.join(deps, 'opdep', 'package.json'),
-    JSON.stringify(opdep, null, 2)
-  )
-  fs.writeFileSync(path.join(deps, 'opdep', 'bad-server.js'), badServer)
-
-  t.end()
-})
-
-test('go go test racer', function (t) {
-  common.npm(
-    [
-      '--prefix', pkg,
-      '--fetch-retries', '0',
-      '--loglevel', 'silent',
-      '--cache', cache,
-      'install'
-    ],
-    {
-      cwd: pkg,
-      env: {
-        PATH: process.env.PATH,
-        Path: process.env.Path
-      },
-      stdio: [0, 'pipe', 2]
-    },
-    function (er, code, stdout, stderr) {
-      t.ifError(er, 'install ran to completion without error')
-      t.notOk(code, 'npm install exited with code 0')
-
-      t.equal(stdout, 'ok\nok\n')
-      t.notOk(/not ok/.test(stdout), 'should not contain the string \'not ok\'')
-      t.end()
-    }
-  )
-})
-
-test('verify results', function (t) {
-  t.throws(function () {
-    fs.statSync(nm)
-  })
-  t.end()
-})
-
-test('cleanup', function (t) {
-  cleanup()
-  t.end()
-})
-
-function cleanup () {
-  process.chdir(osenv.tmpdir())
-  try {
-    var pid = +fs.readFileSync(pidfile)
-    process.kill(pid, 'SIGKILL')
-  } catch (er) {}
-
-  rimraf.sync(pkg)
-}
-
-var badServer = function () {/*
+var badServer = function () { /*
 var createServer = require('http').createServer
 var spawn = require('child_process').spawn
 var fs = require('fs')
@@ -180,9 +98,9 @@ if (process.argv[2]) {
 
   fs.writeFileSync(pidfile, child.pid + '\n')
 }
-*/}.toString().split('\n').slice(1, -1).join('\n')
+*/ }.toString().split('\n').slice(1, -1).join('\n')
 
-var blart = function () {/*
+var blart = function () { /*
 var rando = require('crypto').randomBytes
 var resolve = require('path').resolve
 
@@ -234,4 +152,87 @@ mkdirp(BASEDIR, function go () {
     keepItGoingLouder = {}
   }, 3 * 1000)
 })
-*/}.toString().split('\n').slice(1, -1).join('\n')
+*/ }.toString().split('\n').slice(1, -1).join('\n')
+test('setup', function (t) {
+  cleanup()
+
+  mkdirp.sync(pkg)
+  fs.writeFileSync(
+    path.join(pkg, 'package.json'),
+    JSON.stringify(json, null, 2)
+  )
+
+  mkdirp.sync(path.join(deps, 'd1'))
+  fs.writeFileSync(
+    path.join(deps, 'd1', 'package.json'),
+    JSON.stringify(d1, null, 2)
+  )
+
+  mkdirp.sync(path.join(deps, 'd2'))
+  fs.writeFileSync(
+    path.join(deps, 'd2', 'package.json'),
+    JSON.stringify(d2, null, 2)
+  )
+  fs.writeFileSync(path.join(deps, 'd2', 'blart.js'), blart)
+
+  mkdirp.sync(path.join(deps, 'opdep'))
+  fs.writeFileSync(
+    path.join(deps, 'opdep', 'package.json'),
+    JSON.stringify(opdep_json, null, 2)
+  )
+  fs.writeFileSync(path.join(deps, 'opdep', 'bad-server.js'), badServer)
+
+  t.end()
+})
+
+test('go go test racer', function (t) {
+  common.npm(
+    [
+      '--prefix', pkg,
+      '--fetch-retries', '0',
+      '--loglevel', 'silent',
+      '--parseable',
+      '--cache', cache,
+      'install'
+    ],
+    {
+      cwd: pkg,
+      env: {
+        PATH: process.env.PATH,
+        Path: process.env.Path
+      }
+    },
+    function (er, code, stdout, stderr) {
+      t.ifError(er, 'install ran to completion without error')
+      t.is(code, 0, 'npm install exited with code 0')
+      t.comment(stdout.trim())
+      // stdout should be empty, because we only have one, optional, dep and
+      // if it fails we shouldn't try installing anything
+      t.equal(stdout, '')
+      t.notOk(/not ok/.test(stdout), 'should not contain the string \'not ok\'')
+      t.end()
+    }
+  )
+})
+
+test('verify results', function (t) {
+  t.throws(function () {
+    fs.statSync(opdep)
+  })
+  t.end()
+})
+
+test('cleanup', function (t) {
+  cleanup()
+  t.end()
+})
+
+function cleanup () {
+  process.chdir(osenv.tmpdir())
+  try {
+    var pid = +fs.readFileSync(pidfile)
+    process.kill(pid, 'SIGKILL')
+  } catch (er) {}
+
+  rimraf.sync(pkg)
+}

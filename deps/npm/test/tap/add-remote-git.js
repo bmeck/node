@@ -16,6 +16,19 @@ var daemon
 var daemonPID
 var git
 
+var pjParent = JSON.stringify({
+  name: 'parent',
+  version: '1.2.3',
+  dependencies: {
+    child: 'git://localhost:1234/child.git'
+  }
+}, null, 2) + '\n'
+
+var pjChild = JSON.stringify({
+  name: 'child',
+  version: '1.0.3'
+}, null, 2) + '\n'
+
 test('setup', function (t) {
   bootstrap()
   setup(function (er, r) {
@@ -47,19 +60,6 @@ test('clean', function (t) {
   process.kill(daemonPID)
 })
 
-var pjParent = JSON.stringify({
-  name: 'parent',
-  version: '1.2.3',
-  dependencies: {
-    child: 'git://localhost:1234/child.git'
-  }
-}, null, 2) + '\n'
-
-var pjChild = JSON.stringify({
-  name: 'child',
-  version: '1.0.3'
-}, null, 2) + '\n'
-
 function bootstrap () {
   mkdirp.sync(pkg)
   fs.writeFileSync(resolve(pkg, 'package.json'), pjParent)
@@ -80,6 +80,7 @@ function setup (cb) {
           '--listen=localhost',
           '--export-all',
           '--base-path=.',
+          '--reuseaddr',
           '--port=1234'
         ],
         {

@@ -2,8 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef V8_MIPS_CODE_STUBS_ARM_H_
-#define V8_MIPS_CODE_STUBS_ARM_H_
+#ifndef V8_MIPS_CODE_STUBS_MIPS64_H_
+#define V8_MIPS_CODE_STUBS_MIPS64_H_
+
+#include "src/mips64/frames-mips64.h"
 
 namespace v8 {
 namespace internal {
@@ -14,17 +16,6 @@ void ArrayNativeCode(MacroAssembler* masm, Label* call_generic_code);
 
 class StringHelper : public AllStatic {
  public:
-  // Generate code for copying a large number of characters. This function
-  // is allowed to spend extra time setting up conditions to make copying
-  // faster. Copying of overlapping regions is not supported.
-  // Dest register ends at the position after the last character written.
-  static void GenerateCopyCharacters(MacroAssembler* masm,
-                                     Register dest,
-                                     Register src,
-                                     Register count,
-                                     Register scratch,
-                                     String::Encoding encoding);
-
   // Compares two flat one-byte strings and returns result in v0.
   static void GenerateCompareFlatOneByteStrings(
       MacroAssembler* masm, Register left, Register right, Register scratch1,
@@ -102,7 +93,7 @@ class RecordWriteStub: public PlatformCodeStub {
     INCREMENTAL_COMPACTION
   };
 
-  bool SometimesSetsUpAFrame() OVERRIDE { return false; }
+  bool SometimesSetsUpAFrame() override { return false; }
 
   static void PatchBranchIntoNop(MacroAssembler* masm, int pos) {
     const unsigned offset = masm->instr_at(pos) & kImm16Mask;
@@ -139,9 +130,8 @@ class RecordWriteStub: public PlatformCodeStub {
   }
 
   static void Patch(Code* stub, Mode mode) {
-    MacroAssembler masm(NULL,
-                        stub->instruction_start(),
-                        stub->instruction_size());
+    MacroAssembler masm(stub->GetIsolate(), stub->instruction_start(),
+                        stub->instruction_size(), CodeObjectRequired::kNo);
     switch (mode) {
       case STORE_BUFFER_ONLY:
         DCHECK(GetMode(stub) == INCREMENTAL ||
@@ -159,8 +149,8 @@ class RecordWriteStub: public PlatformCodeStub {
         break;
     }
     DCHECK(GetMode(stub) == mode);
-    CpuFeatures::FlushICache(stub->instruction_start(),
-                             4 * Assembler::kInstrSize);
+    Assembler::FlushICache(stub->GetIsolate(), stub->instruction_start(),
+                           4 * Assembler::kInstrSize);
   }
 
   DEFINE_NULL_CALL_INTERFACE_DESCRIPTOR();
@@ -229,9 +219,9 @@ class RecordWriteStub: public PlatformCodeStub {
     kUpdateRememberedSetOnNoNeedToInformIncrementalMarker
   };
 
-  inline Major MajorKey() const FINAL { return RecordWrite; }
+  inline Major MajorKey() const final { return RecordWrite; }
 
-  void Generate(MacroAssembler* masm) OVERRIDE;
+  void Generate(MacroAssembler* masm) override;
   void GenerateIncremental(MacroAssembler* masm, Mode mode);
   void CheckNeedsToInformIncrementalMarker(
       MacroAssembler* masm,
@@ -239,7 +229,7 @@ class RecordWriteStub: public PlatformCodeStub {
       Mode mode);
   void InformIncrementalMarker(MacroAssembler* masm);
 
-  void Activate(Code* code) OVERRIDE {
+  void Activate(Code* code) override {
     code->GetHeap()->incremental_marking()->ActivateGeneratedStub(code);
   }
 
@@ -287,7 +277,7 @@ class DirectCEntryStub: public PlatformCodeStub {
   void GenerateCall(MacroAssembler* masm, Register target);
 
  private:
-  bool NeedsImmovableCode() OVERRIDE { return true; }
+  bool NeedsImmovableCode() override { return true; }
 
   DEFINE_NULL_CALL_INTERFACE_DESCRIPTOR();
   DEFINE_PLATFORM_CODE_STUB(DirectCEntry, PlatformCodeStub);
@@ -311,15 +301,7 @@ class NameDictionaryLookupStub: public PlatformCodeStub {
                                      Handle<Name> name,
                                      Register scratch0);
 
-  static void GeneratePositiveLookup(MacroAssembler* masm,
-                                     Label* miss,
-                                     Label* done,
-                                     Register elements,
-                                     Register name,
-                                     Register r0,
-                                     Register r1);
-
-  bool SometimesSetsUpAFrame() OVERRIDE { return false; }
+  bool SometimesSetsUpAFrame() override { return false; }
 
  private:
   static const int kInlinedProbes = 4;
@@ -342,6 +324,7 @@ class NameDictionaryLookupStub: public PlatformCodeStub {
 };
 
 
-} }  // namespace v8::internal
+}  // namespace internal
+}  // namespace v8
 
-#endif  // V8_MIPS_CODE_STUBS_ARM_H_
+#endif  // V8_MIPS_CODE_STUBS_MIPS64_H_

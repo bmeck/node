@@ -1,54 +1,60 @@
-var common = require('../common');
-var assert = require('assert');
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-if (!common.hasCrypto) {
-  console.log('1..0 # Skipped: missing crypto');
-  process.exit();
-}
-var tls = require('tls');
+'use strict';
+require('../common');
+const fixtures = require('../common/fixtures');
 
-var fs = require('fs');
-var util = require('util');
-var join = require('path').join;
-var spawn = require('child_process').spawn;
+// Verify that detailed getPeerCertificate() return value has all certs.
 
-var options = {
-  key: fs.readFileSync(join(common.fixturesDir, 'keys', 'agent1-key.pem')),
-  cert: fs.readFileSync(join(common.fixturesDir, 'keys', 'agent1-cert.pem')),
-  ca: [ fs.readFileSync(join(common.fixturesDir, 'keys', 'ca1-cert.pem')) ]
-};
-var verified = false;
+const {
+  assert, connect, debug, keys
+} = require(fixtures.path('tls-connect'));
 
-var server = tls.createServer(options, function(cleartext) {
-  cleartext.end('World');
-});
-server.listen(common.PORT, function() {
-  var socket = tls.connect({
-    port: common.PORT,
-    rejectUnauthorized: false
-  }, function() {
-    var peerCert = socket.getPeerCertificate();
-    assert.ok(!peerCert.issuerCertificate);
+connect({
+  client: { rejectUnauthorized: false },
+  server: keys.agent1,
+}, function(err, pair, cleanup) {
+  assert.ifError(err);
+  const socket = pair.client.conn;
+  let peerCert = socket.getPeerCertificate();
+  assert.ok(!peerCert.issuerCertificate);
 
-    // Verify that detailed return value has all certs
-    peerCert = socket.getPeerCertificate(true);
-    assert.ok(peerCert.issuerCertificate);
+  peerCert = socket.getPeerCertificate(true);
+  debug('peerCert:\n', peerCert);
 
-    common.debug(util.inspect(peerCert));
-    assert.equal(peerCert.subject.emailAddress, 'ry@tinyclouds.org');
-    assert.equal(peerCert.serialNumber, '9A84ABCFB8A72AC0');
-    assert.deepEqual(peerCert.infoAccess['OCSP - URI'],
-                     [ 'http://ocsp.nodejs.org/' ]);
+  assert.ok(peerCert.issuerCertificate);
+  assert.strictEqual(peerCert.subject.emailAddress, 'ry@tinyclouds.org');
+  assert.strictEqual(peerCert.serialNumber, '9A84ABCFB8A72AC0');
+  assert.strictEqual(peerCert.exponent, '0x10001');
+  assert.strictEqual(
+    peerCert.fingerprint,
+    '8D:06:3A:B3:E5:8B:85:29:72:4F:7D:1B:54:CD:95:19:3C:EF:6F:AA'
+  );
+  assert.deepStrictEqual(peerCert.infoAccess['OCSP - URI'],
+                         [ 'http://ocsp.nodejs.org/' ]);
 
-    var issuer = peerCert.issuerCertificate;
-    assert.ok(issuer.issuerCertificate === issuer);
-    assert.equal(issuer.serialNumber, '8DF21C01468AF393');
-    verified = true;
-    server.close();
-  });
-  socket.end('Hello');
-});
+  const issuer = peerCert.issuerCertificate;
+  assert.strictEqual(issuer.issuerCertificate, issuer);
+  assert.strictEqual(issuer.serialNumber, '8DF21C01468AF393');
 
-process.on('exit', function() {
-  assert.ok(verified);
+  return cleanup();
 });

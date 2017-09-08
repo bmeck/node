@@ -358,7 +358,7 @@ $S=12;		# shift factor for rem_4bit
 # effective address calculation and finally merge of value to Z.hi.
 # Reference to rem_4bit is scheduled so late that I had to >>4
 # rem_4bit elements. This resulted in 20-45% procent improvement
-# on contemporary µ-archs.
+# on contemporary Âµ-archs.
 {
     my $cnt;
     my $rem_4bit = "eax";
@@ -905,7 +905,7 @@ my ($Xhi,$Xi) = @_;
 	&psllq		($Xi,57);		#
 	&movdqa		($T1,$Xi);		#
 	&pslldq		($Xi,8);
-	&psrldq		($T1,8);		#
+	&psrldq		($T1,8);		#	
 	&pxor		($Xi,$T2);
 	&pxor		($Xhi,$T1);		#
 
@@ -1075,7 +1075,7 @@ my ($Xhi,$Xi) = @_;
 	  &psllq	($Xi,57);		#
 	  &movdqa	($T1,$Xi);		#
 	  &pslldq	($Xi,8);
-	  &psrldq	($T1,8);		#
+	  &psrldq	($T1,8);		#	
 	  &pxor		($Xi,$T2);
 	  &pxor		($Xhi,$T1);		#
 	&pshufd		($T1,$Xhn,0b01001110);

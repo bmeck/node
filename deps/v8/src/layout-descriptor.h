@@ -70,12 +70,20 @@ class LayoutDescriptor : public FixedTypedArray<Uint32ArrayTraits> {
   V8_INLINE static LayoutDescriptor* FastPointerLayout();
 
   // Check that this layout descriptor corresponds to given map.
-  bool IsConsistentWithMap(Map* map);
+  bool IsConsistentWithMap(Map* map, bool check_tail = false);
+
+  // Trims this layout descriptor to given number of descriptors. This happens
+  // only when corresponding descriptors array is trimmed.
+  // The layout descriptor could be trimmed if it was slow or it could
+  // become fast.
+  LayoutDescriptor* Trim(Heap* heap, Map* map, DescriptorArray* descriptors,
+                         int num_descriptors);
 
 #ifdef OBJECT_PRINT
   // For our gdb macros, we should perhaps change these in the future.
   void Print();
 
+  void ShortPrint(std::ostream& os);
   void Print(std::ostream& os);  // NOLINT
 #endif
 
@@ -94,6 +102,21 @@ class LayoutDescriptor : public FixedTypedArray<Uint32ArrayTraits> {
   V8_INLINE static bool InobjectUnboxedField(int inobject_properties,
                                              PropertyDetails details);
 
+  // Calculates minimal layout descriptor capacity required for given
+  // |map|, |descriptors| and |num_descriptors|.
+  V8_INLINE static int CalculateCapacity(Map* map, DescriptorArray* descriptors,
+                                         int num_descriptors);
+
+  // Calculates the length of the slow-mode backing store array by given layout
+  // descriptor length.
+  V8_INLINE static int GetSlowModeBackingStoreLength(int length);
+
+  // Fills in clean |layout_descriptor| according to given |map|, |descriptors|
+  // and |num_descriptors|.
+  V8_INLINE static LayoutDescriptor* Initialize(
+      LayoutDescriptor* layout_descriptor, Map* map,
+      DescriptorArray* descriptors, int num_descriptors);
+
   static Handle<LayoutDescriptor> EnsureCapacity(
       Isolate* isolate, Handle<LayoutDescriptor> layout_descriptor,
       int new_capacity);
@@ -102,9 +125,7 @@ class LayoutDescriptor : public FixedTypedArray<Uint32ArrayTraits> {
   V8_INLINE bool GetIndexes(int field_index, int* layout_word_index,
                             int* layout_bit_index);
 
-  V8_INLINE MUST_USE_RESULT LayoutDescriptor* SetRawData(int field_index) {
-    return SetTagged(field_index, false);
-  }
+  V8_INLINE MUST_USE_RESULT LayoutDescriptor* SetRawData(int field_index);
 
   V8_INLINE MUST_USE_RESULT LayoutDescriptor* SetTagged(int field_index,
                                                         bool tagged);
@@ -133,7 +154,7 @@ class LayoutDescriptorHelper {
   int header_size_;
   LayoutDescriptor* layout_descriptor_;
 };
-}
-}  // namespace v8::internal
+}  // namespace internal
+}  // namespace v8
 
 #endif  // V8_LAYOUT_DESCRIPTOR_H_

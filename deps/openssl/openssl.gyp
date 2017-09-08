@@ -8,7 +8,9 @@
     'gcc_version': 0,
     'openssl_no_asm%': 0,
     'llvm_version%': 0,
+    'xcode_version%': 0,
     'gas_version%': 0,
+    'openssl_fips%': 'false',
   },
   'targets': [
     {
@@ -21,6 +23,42 @@
         ['exclude', 'store/.*$']
       ],
       'conditions': [
+        # FIPS
+        ['openssl_fips != ""', {
+          'defines': [
+            'OPENSSL_FIPS',
+          ],
+          'include_dirs': [
+            '<(openssl_fips)/include',
+          ],
+
+          # Trick fipsld, it expects to see libcrypto.a
+          'product_name': 'crypto',
+
+          'direct_dependent_settings': {
+            'defines': [
+              'OPENSSL_FIPS',
+            ],
+            'include_dirs': [
+              '<(openssl_fips)/include',
+            ],
+          },
+        }],
+        [ 'OS=="aix"', {
+            # AIX is missing /usr/include/endian.h
+            'defines': [
+              '__LITTLE_ENDIAN=1234',
+              '__BIG_ENDIAN=4321',
+              '__BYTE_ORDER=__BIG_ENDIAN',
+              '__FLOAT_WORD_ORDER=__BIG_ENDIAN'],
+        }],
+        [ 'node_byteorder=="big"', {
+            # Define Big Endian
+            'defines': ['B_ENDIAN']
+          }, {
+            # Define Little Endian
+           'defines':['L_ENDIAN']
+        }],
         ['openssl_no_asm!=0', {
           # Disable asm
           'defines': [
@@ -83,10 +121,17 @@
         }], # end of conditions of openssl_no_asm
         ['OS=="win"', {
           'defines' : ['<@(openssl_defines_all_win)'],
-          'includes': ['masm_compile.gypi',],
         }, {
           'defines' : ['<@(openssl_defines_all_non_win)']
-        }]
+        }],
+        ['target_arch=="ia32" and OS=="win"', {
+          'msvs_settings': {
+            'MASM': {
+              # Use /safeseh, see commit: 01fa5ee
+              'UseSafeExceptionHandlers': 'true',
+            },
+          },
+        }],
       ],
       'include_dirs': ['<@(openssl_include_dirs)'],
       'direct_dependent_settings': {

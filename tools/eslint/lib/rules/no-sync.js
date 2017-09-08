@@ -3,7 +3,7 @@
  * @author Matt DuVall<http://mattduvall.com/>
  */
 
-/*jshint node:true*/
+/* jshint node:true */
 
 "use strict";
 
@@ -11,18 +11,43 @@
 // Rule Definition
 //------------------------------------------------------------------------------
 
-module.exports = function(context) {
+module.exports = {
+    meta: {
+        docs: {
+            description: "disallow synchronous methods",
+            category: "Node.js and CommonJS",
+            recommended: false
+        },
 
-    return {
-
-        "MemberExpression": function(node) {
-            var propertyName = node.property.name,
-                syncRegex = /.*Sync$/;
-
-            if (syncRegex.exec(propertyName) !== null) {
-                context.report(node, "Unexpected sync method: '" + propertyName + "'.");
+        schema: [
+            {
+                type: "object",
+                properties: {
+                    allowAtRootLevel: {
+                        type: "boolean"
+                    }
+                },
+                additionalProperties: false
             }
-        }
-    };
+        ]
+    },
 
+    create(context) {
+        const selector = context.options[0] && context.options[0].allowAtRootLevel
+            ? ":function MemberExpression[property.name=/.*Sync$/]"
+            : "MemberExpression[property.name=/.*Sync$/]";
+
+        return {
+            [selector](node) {
+                context.report({
+                    node,
+                    message: "Unexpected sync method: '{{propertyName}}'.",
+                    data: {
+                        propertyName: node.property.name
+                    }
+                });
+            }
+        };
+
+    }
 };

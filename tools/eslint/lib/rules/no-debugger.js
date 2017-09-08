@@ -5,16 +5,39 @@
 
 "use strict";
 
+const astUtils = require("../ast-utils");
+
 //------------------------------------------------------------------------------
 // Rule Definition
 //------------------------------------------------------------------------------
 
-module.exports = function(context) {
+module.exports = {
+    meta: {
+        docs: {
+            description: "disallow the use of `debugger`",
+            category: "Possible Errors",
+            recommended: true
+        },
+        fixable: "code",
+        schema: []
+    },
 
-    return {
-        "DebuggerStatement": function(node) {
-            context.report(node, "Unexpected 'debugger' statement.");
-        }
-    };
+    create(context) {
 
+        return {
+            DebuggerStatement(node) {
+                context.report({
+                    node,
+                    message: "Unexpected 'debugger' statement.",
+                    fix(fixer) {
+                        if (astUtils.STATEMENT_LIST_PARENTS.has(node.parent.type)) {
+                            return fixer.remove(node);
+                        }
+                        return null;
+                    }
+                });
+            }
+        };
+
+    }
 };

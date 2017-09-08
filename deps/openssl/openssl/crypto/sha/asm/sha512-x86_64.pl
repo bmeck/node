@@ -124,7 +124,7 @@ if (!$avx && $win64 && ($flavour =~ /masm/ || $ENV{ASM} =~ /ml64/) &&
 	$avx = ($1>=10) + ($1>=11);
 }
 
-if (!$avx && `$ENV{CC} -v 2>&1` =~ /(^clang version|based on LLVM) ([3-9]\.[0-9]+)/) {
+if (!$avx && `$ENV{CC} -v 2>&1` =~ /((?:^clang|LLVM) version|.*based on LLVM) ([3-9]\.[0-9]+)/) {
 	$avx = ($2>=3.0) + ($2>3.0);
 }
 
@@ -1774,7 +1774,7 @@ if ($avx>1) {{
 ######################################################################
 # AVX2+BMI code path
 #
-my $a5=$SZ==4?"%esi":"%rsi";	# zap $inp
+my $a5=$SZ==4?"%esi":"%rsi";	# zap $inp 
 my $PUSH8=8*2*$SZ;
 use integer;
 
@@ -2375,7 +2375,7 @@ sub sha256op38 {
     my $instr = shift;
     my %opcodelet = (
 		"sha256rnds2" => 0xcb,
-		"sha256msg1"  => 0xcc,
+  		"sha256msg1"  => 0xcc,
 		"sha256msg2"  => 0xcd	);
 
     if (defined($opcodelet{$instr}) && @_[0] =~ /%xmm([0-7]),\s*%xmm([0-7])/) {

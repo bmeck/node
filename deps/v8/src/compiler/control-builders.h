@@ -37,12 +37,12 @@ class ControlBuilder {
 
 
 // Tracks control flow for a conditional statement.
-class IfBuilder FINAL : public ControlBuilder {
+class IfBuilder final : public ControlBuilder {
  public:
   explicit IfBuilder(AstGraphBuilder* builder)
       : ControlBuilder(builder),
-        then_environment_(NULL),
-        else_environment_(NULL) {}
+        then_environment_(nullptr),
+        else_environment_(nullptr) {}
 
   // Primitive control commands.
   void If(Node* condition, BranchHint hint = BranchHint::kNone);
@@ -57,13 +57,14 @@ class IfBuilder FINAL : public ControlBuilder {
 
 
 // Tracks control flow for an iteration statement.
-class LoopBuilder FINAL : public ControlBuilder {
+class LoopBuilder final : public ControlBuilder {
  public:
   explicit LoopBuilder(AstGraphBuilder* builder)
       : ControlBuilder(builder),
-        loop_environment_(NULL),
-        continue_environment_(NULL),
-        break_environment_(NULL) {}
+        loop_environment_(nullptr),
+        continue_environment_(nullptr),
+        break_environment_(nullptr),
+        assigned_(nullptr) {}
 
   // Primitive control commands.
   void BeginLoop(BitVector* assigned, bool is_osr = false);
@@ -72,7 +73,11 @@ class LoopBuilder FINAL : public ControlBuilder {
   void EndLoop();
 
   // Primitive support for break.
-  void Break() FINAL;
+  void Break() final;
+
+  // Loop exit support. Used to introduce explicit loop exit control
+  // node and variable markers.
+  void ExitLoop(Node** extra_value_to_rename = nullptr);
 
   // Compound control commands for conditional break.
   void BreakUnless(Node* condition);
@@ -82,17 +87,18 @@ class LoopBuilder FINAL : public ControlBuilder {
   Environment* loop_environment_;      // Environment of the loop header.
   Environment* continue_environment_;  // Environment after the loop body.
   Environment* break_environment_;     // Environment after the loop exits.
+  BitVector* assigned_;                // Assigned values in the environment.
 };
 
 
 // Tracks control flow for a switch statement.
-class SwitchBuilder FINAL : public ControlBuilder {
+class SwitchBuilder final : public ControlBuilder {
  public:
   explicit SwitchBuilder(AstGraphBuilder* builder, int case_count)
       : ControlBuilder(builder),
-        body_environment_(NULL),
-        label_environment_(NULL),
-        break_environment_(NULL),
+        body_environment_(nullptr),
+        label_environment_(nullptr),
+        break_environment_(nullptr),
         body_environments_(case_count, zone()) {}
 
   // Primitive control commands.
@@ -105,7 +111,7 @@ class SwitchBuilder FINAL : public ControlBuilder {
   void EndSwitch();
 
   // Primitive support for break.
-  void Break() FINAL;
+  void Break() final;
 
   // The number of cases within a switch is statically known.
   size_t case_count() const { return body_environments_.size(); }
@@ -119,68 +125,24 @@ class SwitchBuilder FINAL : public ControlBuilder {
 
 
 // Tracks control flow for a block statement.
-class BlockBuilder FINAL : public ControlBuilder {
+class BlockBuilder final : public ControlBuilder {
  public:
   explicit BlockBuilder(AstGraphBuilder* builder)
-      : ControlBuilder(builder), break_environment_(NULL) {}
+      : ControlBuilder(builder), break_environment_(nullptr) {}
 
   // Primitive control commands.
   void BeginBlock();
   void EndBlock();
 
   // Primitive support for break.
-  void Break() FINAL;
+  void Break() final;
+
+  // Compound control commands for conditional break.
+  void BreakWhen(Node* condition, BranchHint = BranchHint::kNone);
+  void BreakUnless(Node* condition, BranchHint hint = BranchHint::kNone);
 
  private:
   Environment* break_environment_;  // Environment after the block exits.
-};
-
-
-// Tracks control flow for a try-catch statement.
-class TryCatchBuilder FINAL : public ControlBuilder {
- public:
-  explicit TryCatchBuilder(AstGraphBuilder* builder)
-      : ControlBuilder(builder),
-        catch_environment_(NULL),
-        exit_environment_(NULL),
-        exception_node_(NULL) {}
-
-  // Primitive control commands.
-  void BeginTry();
-  void Throw(Node* exception);
-  void EndTry();
-  void EndCatch();
-
-  // Returns the exception value inside the 'catch' body.
-  Node* GetExceptionNode() const { return exception_node_; }
-
- private:
-  Environment* catch_environment_;  // Environment for the 'catch' body.
-  Environment* exit_environment_;   // Environment after the statement.
-  Node* exception_node_;            // Node for exception in 'catch' body.
-};
-
-
-// Tracks control flow for a try-finally statement.
-class TryFinallyBuilder FINAL : public ControlBuilder {
- public:
-  explicit TryFinallyBuilder(AstGraphBuilder* builder)
-      : ControlBuilder(builder),
-        finally_environment_(NULL),
-        token_node_(NULL) {}
-
-  // Primitive control commands.
-  void BeginTry();
-  void LeaveTry(Node* token);
-  void EndTry(Node* token);
-  void EndFinally();
-
-  // Returns the dispatch token value inside the 'finally' body.
-  Node* GetDispatchTokenNode() const { return token_node_; }
-
- private:
-  Environment* finally_environment_;  // Environment for the 'finally' body.
-  Node* token_node_;                  // Node for token in 'finally' body.
 };
 
 }  // namespace compiler

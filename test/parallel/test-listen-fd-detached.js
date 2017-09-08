@@ -1,14 +1,33 @@
-var common = require('../common');
-var assert = require('assert');
-var http = require('http');
-var net = require('net');
-var PORT = common.PORT;
-var spawn = require('child_process').spawn;
+// Copyright Joyent, Inc. and other Node contributors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and associated documentation files (the
+// "Software"), to deal in the Software without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Software, and to permit
+// persons to whom the Software is furnished to do so, subject to the
+// following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+// OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
+// NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+// DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
+// OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
+// USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-if (process.platform === 'win32') {
-  console.error('This test is disabled on windows.');
-  return;
-}
+'use strict';
+const common = require('../common');
+if (common.isWindows)
+  common.skip('This test is disabled on windows.');
+
+const assert = require('assert');
+const http = require('http');
+const net = require('net');
+const spawn = require('child_process').spawn;
 
 switch (process.argv[2]) {
   case 'child': return child();
@@ -23,24 +42,24 @@ switch (process.argv[2]) {
 // concurrency in HTTP servers!  Use the cluster module, or if you want
 // a more low-level approach, use child process IPC manually.
 function test() {
-  var parent = spawn(process.execPath, [__filename, 'parent'], {
+  const parent = spawn(process.execPath, [__filename, 'parent'], {
     stdio: [ 0, 'pipe', 2 ]
   });
-  var json = '';
+  let json = '';
   parent.stdout.on('data', function(c) {
     json += c.toString();
-    if (json.indexOf('\n') !== -1) next();
+    if (json.includes('\n')) next();
   });
   function next() {
     console.error('output from parent = %s', json);
-    var child = JSON.parse(json);
+    const child = JSON.parse(json);
     // now make sure that we can request to the child, then kill it.
     http.get({
       server: 'localhost',
-      port: PORT,
+      port: child.port,
       path: '/',
-    }).on('response', function (res) {
-      var s = '';
+    }).on('response', function(res) {
+      let s = '';
       res.on('data', function(c) {
         s += c.toString();
       });
@@ -52,27 +71,26 @@ function test() {
           parent.kill();
         } catch (e) {}
 
-        assert.equal(s, 'hello from child\n');
-        assert.equal(res.statusCode, 200);
+        assert.strictEqual(s, 'hello from child\n');
+        assert.strictEqual(res.statusCode, 200);
       });
-    })
+    });
   }
 }
 
 function parent() {
-  var server = net.createServer(function(conn) {
+  const server = net.createServer(function(conn) {
     console.error('connection on parent');
     conn.end('hello from parent\n');
-  }).listen(PORT, function() {
-    console.error('server listening on %d', PORT);
+  }).listen(0, function() {
+    console.error('server listening on %d', this.address().port);
 
-    var spawn = require('child_process').spawn;
-    var child = spawn(process.execPath, [__filename, 'child'], {
+    const child = spawn(process.execPath, [__filename, 'child'], {
       stdio: [ 'ignore', 'ignore', 'ignore', server._handle ],
       detached: true
     });
 
-    console.log('%j\n', { pid: child.pid });
+    console.log('%j\n', { pid: child.pid, port: this.address().port });
 
     // Now close the parent, so that the child is the only thing
     // referencing that handle.  Note that connections will still
@@ -93,4 +111,3 @@ function child() {
     console.error('child listening on fd=3');
   });
 }
-

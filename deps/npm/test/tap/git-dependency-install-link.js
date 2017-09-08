@@ -13,6 +13,7 @@ var common = require('../common-tap.js')
 
 var pkg = resolve(__dirname, 'git-dependency-install-link')
 var repo = resolve(__dirname, 'git-dependency-install-link-repo')
+var prefix = resolve(__dirname, 'git-dependency-install-link-prefix')
 var cache = resolve(pkg, 'cache')
 
 var daemon
@@ -25,6 +26,20 @@ var EXEC_OPTS = {
   cwd: pkg,
   cache: cache
 }
+process.env.npm_config_prefix = prefix
+
+var pjParent = JSON.stringify({
+  name: 'parent',
+  version: '1.2.3',
+  dependencies: {
+    'child': 'git://localhost:1234/child.git'
+  }
+}, null, 2) + '\n'
+
+var pjChild = JSON.stringify({
+  name: 'child',
+  version: '1.0.3'
+}, null, 2) + '\n'
 
 test('setup', function (t) {
   bootstrap()
@@ -50,7 +65,7 @@ test('setup', function (t) {
 test('install from git repo [no --link]', function (t) {
   process.chdir(pkg)
 
-  common.npm(['install', '--loglevel', 'error'], EXEC_OPTS, function (err, code, stdout, stderr) {
+  common.npm(['install'], EXEC_OPTS, function (err, code, stdout, stderr) {
     t.ifError(err, 'npm install failed')
 
     t.dissimilar(stderr, /Command failed:/, 'expect git to succeed')
@@ -69,11 +84,13 @@ test('install from git repo [with --link]', function (t) {
   process.chdir(pkg)
   rimraf.sync(resolve(pkg, 'node_modules'))
 
-  common.npm(['install', '--link', '--loglevel', 'error'], EXEC_OPTS, function (err, code, stdout, stderr) {
+  common.npm(['install', '--link'], EXEC_OPTS, function (err, code, stdout, stderr) {
     t.ifError(err, 'npm install --link failed')
+    t.equal(code, 0, 'npm install --link returned non-0 code')
 
     t.dissimilar(stderr, /Command failed:/, 'expect git to succeed')
     t.dissimilar(stderr, /version not found/, 'should not go to repository')
+    t.equal(stderr, '', 'no actual output on stderr')
 
     readJson(resolve(pkg, 'node_modules', 'child', 'package.json'), function (err, data) {
       t.ifError(err, 'error reading child package.json')
@@ -93,19 +110,6 @@ test('clean', function (t) {
   process.kill(daemonPID)
 })
 
-var pjParent = JSON.stringify({
-  name: 'parent',
-  version: '1.2.3',
-  dependencies: {
-    'child': 'git://localhost:1234/child.git'
-  }
-}, null, 2) + '\n'
-
-var pjChild = JSON.stringify({
-  name: 'child',
-  version: '1.0.3'
-}, null, 2) + '\n'
-
 function bootstrap () {
   rimraf.sync(repo)
   rimraf.sync(pkg)
@@ -123,51 +127,53 @@ function setup (cb) {
     prefix: pkg,
     loglevel: 'silent'
   }, function () {
-      git = require('../../lib/utils/git.js')
+    git = require('../../lib/utils/git.js')
 
-      function startDaemon (cb) {
-        // start git server
-        var d = git.spawn(
-          [
-            'daemon',
-            '--verbose',
-            '--listen=localhost',
-            '--export-all',
-            '--base-path=.',
-            '--port=1234'
-          ],
-          {
-            cwd: pkg,
-            env: process.env,
-            stdio: ['pipe', 'pipe', 'pipe']
-          }
-        )
-        d.stderr.on('data', childFinder)
+    function startDaemon (cb) {
+      // start git server
+      var d = git.spawn(
+        [
+          'daemon',
+          '--verbose',
+          '--listen=localhost',
+          '--export-all',
+          '--base-path=.',
+          '--reuseaddr',
+          '--port=1234'
+        ],
+        {
+          cwd: pkg,
+          env: process.env,
+          stdio: ['pipe', 'pipe', 'pipe']
+        }
+      )
+      d.stderr.on('data', childFinder)
 
-        function childFinder (c) {
-          var cpid = c.toString().match(/^\[(\d+)\]/)
-          if (cpid[1]) {
-            this.removeListener('data', childFinder)
-            cb(null, [d, cpid[1]])
-          }
+      function childFinder (c) {
+        var cpid = c.toString().match(/^\[(\d+)\]/)
+        if (cpid[1]) {
+          this.removeListener('data', childFinder)
+          cb(null, [d, cpid[1]])
         }
       }
+    }
 
-      common.makeGitRepo({
-        path: repo,
-        commands: [
-          git.chainableExec(
-            ['clone', '--bare', repo, 'child.git'],
-            { cwd: pkg, env: process.env }
-          ),
-          startDaemon
-        ]
-      }, cb)
-    })
+    common.makeGitRepo({
+      path: repo,
+      commands: [
+        git.chainableExec(
+          ['clone', '--bare', repo, 'child.git'],
+          { cwd: pkg, env: process.env }
+        ),
+        startDaemon
+      ]
+    }, cb)
+  })
 }
 
 function cleanup () {
   process.chdir(osenv.tmpdir())
   rimraf.sync(repo)
+  rimraf.sync(prefix)
   rimraf.sync(pkg)
 }

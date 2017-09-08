@@ -1,34 +1,34 @@
-var common = require('../common');
+'use strict';
+const common = require('../common');
 
-if (!common.hasCrypto) {
-  console.log('1..0 # Skipped: missing crypto');
-  process.exit();
-}
-var tls = require('tls');
+if (!common.hasCrypto)
+  common.skip('missing crypto');
 
-var assert = require('assert');
-var fs = require('fs');
-var path = require('path');
+const tls = require('tls');
 
-var cert = fs.readFileSync(path.join(common.fixturesDir, 'test_cert.pem'));
-var key = fs.readFileSync(path.join(common.fixturesDir, 'test_key.pem'));
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
 
-// https://github.com/nodejs/io.js/issues/1489
+const cert = fs.readFileSync(path.join(common.fixturesDir, 'test_cert.pem'));
+const key = fs.readFileSync(path.join(common.fixturesDir, 'test_key.pem'));
+
+// https://github.com/nodejs/node/issues/1489
 // tls.connect(options) with no options.host should accept a cert with
 //   CN:'localhost'
 tls.createServer({
   key: key,
   cert: cert
-}).listen(common.PORT);
-
-var socket = tls.connect({
-    port: common.PORT,
+}).listen(0, function() {
+  const socket = tls.connect({
+    port: this.address().port,
     ca: cert,
     // No host set here. 'localhost' is the default,
     // but tls.checkServerIdentity() breaks before the fix with:
     // Error: Hostname/IP doesn't match certificate's altnames:
     //   "Host: undefined. is not cert's CN: localhost"
-}, function() {
+  }, function() {
     assert(socket.authorized);
     process.exit();
+  });
 });

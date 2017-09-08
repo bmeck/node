@@ -7,7 +7,9 @@
 
 #include <iosfwd>
 
-#include "src/zone-containers.h"
+#include "src/base/compiler-specific.h"
+#include "src/globals.h"
+#include "src/zone/zone-containers.h"
 
 namespace v8 {
 namespace internal {
@@ -18,24 +20,27 @@ class BasicBlock;
 class BasicBlockInstrumentor;
 class Node;
 
-
 typedef ZoneVector<BasicBlock*> BasicBlockVector;
 typedef ZoneVector<Node*> NodeVector;
-
 
 // A basic block contains an ordered list of nodes and ends with a control
 // node. Note that if a basic block has phis, then all phis must appear as the
 // first nodes in the block.
-class BasicBlock FINAL : public ZoneObject {
+class V8_EXPORT_PRIVATE BasicBlock final
+    : public NON_EXPORTED_BASE(ZoneObject) {
  public:
   // Possible control nodes that can end a block.
   enum Control {
-    kNone,    // Control not initialized yet.
-    kGoto,    // Goto a single successor block.
-    kBranch,  // Branch if true to first successor, otherwise second.
-    kSwitch,  // Table dispatch to one of the successor blocks.
-    kReturn,  // Return a value from this method.
-    kThrow    // Throw an exception.
+    kNone,        // Control not initialized yet.
+    kGoto,        // Goto a single successor block.
+    kCall,        // Call with continuation as first successor, exception
+                  // second.
+    kBranch,      // Branch if true to first successor, otherwise second.
+    kSwitch,      // Table dispatch to one of the successor blocks.
+    kDeoptimize,  // Return a value from this method.
+    kTailCall,    // Tail call another method from this method.
+    kReturn,      // Return a value from this method.
+    kThrow        // Throw an exception.
   };
 
   class Id {
@@ -50,38 +55,17 @@ class BasicBlock FINAL : public ZoneObject {
     size_t index_;
   };
 
-  static const int kInvalidRpoNumber = -1;
-  class RpoNumber FINAL {
-   public:
-    int ToInt() const {
-      DCHECK(IsValid());
-      return index_;
-    }
-    size_t ToSize() const {
-      DCHECK(IsValid());
-      return static_cast<size_t>(index_);
-    }
-    bool IsValid() const { return index_ >= 0; }
-    static RpoNumber FromInt(int index) { return RpoNumber(index); }
-    static RpoNumber Invalid() { return RpoNumber(kInvalidRpoNumber); }
-
-    bool IsNext(const RpoNumber other) const {
-      DCHECK(IsValid());
-      return other.index_ == this->index_ + 1;
-    }
-
-    bool operator==(RpoNumber other) const {
-      return this->index_ == other.index_;
-    }
-
-   private:
-    explicit RpoNumber(int32_t index) : index_(index) {}
-    int32_t index_;
-  };
-
   BasicBlock(Zone* zone, Id id);
 
   Id id() const { return id_; }
+#if DEBUG
+  void set_debug_info(AssemblerDebugInfo debug_info) {
+    debug_info_ = debug_info;
+  }
+  AssemblerDebugInfo debug_info() const { return debug_info_; }
+#endif  // DEBUG
+
+  void Print();
 
   // Predecessors.
   BasicBlockVector& predecessors() { return predecessors_; }
@@ -112,6 +96,8 @@ class BasicBlock FINAL : public ZoneObject {
   typedef NodeVector::iterator iterator;
   iterator begin() { return nodes_.begin(); }
   iterator end() { return nodes_.end(); }
+
+  void RemoveNode(iterator it) { nodes_.erase(it); }
 
   typedef NodeVector::const_iterator const_iterator;
   const_iterator begin() const { return nodes_.begin(); }
@@ -159,12 +145,11 @@ class BasicBlock FINAL : public ZoneObject {
   int32_t loop_number() const { return loop_number_; }
   void set_loop_number(int32_t loop_number) { loop_number_ = loop_number; }
 
-  RpoNumber GetRpoNumber() const { return RpoNumber::FromInt(rpo_number_); }
   int32_t rpo_number() const { return rpo_number_; }
   void set_rpo_number(int32_t rpo_number);
 
   // Loop membership helpers.
-  inline bool IsLoopHeader() const { return loop_end_ != NULL; }
+  inline bool IsLoopHeader() const { return loop_end_ != nullptr; }
   bool LoopContains(BasicBlock* block) const;
 
   // Computes the immediate common dominator of {b1} and {b2}. The worst time
@@ -179,8 +164,8 @@ class BasicBlock FINAL : public ZoneObject {
   BasicBlock* dominator_;    // Immediate dominator of the block.
   BasicBlock* rpo_next_;     // Link to next block in special RPO order.
   BasicBlock* loop_header_;  // Pointer to dominating loop header basic block,
-                             // NULL if none. For loop headers, this points to
-                             // enclosing loop header.
+  // nullptr if none. For loop headers, this points to
+  // enclosing loop header.
   BasicBlock* loop_end_;     // end of the loop, if this block is a loop header.
   int32_t loop_depth_;       // loop nesting, 0 is top-level
 
@@ -190,21 +175,24 @@ class BasicBlock FINAL : public ZoneObject {
 
   BasicBlockVector successors_;
   BasicBlockVector predecessors_;
+#if DEBUG
+  AssemblerDebugInfo debug_info_;
+#endif
   Id id_;
 
   DISALLOW_COPY_AND_ASSIGN(BasicBlock);
 };
 
+std::ostream& operator<<(std::ostream&, const BasicBlock&);
 std::ostream& operator<<(std::ostream&, const BasicBlock::Control&);
 std::ostream& operator<<(std::ostream&, const BasicBlock::Id&);
-std::ostream& operator<<(std::ostream&, const BasicBlock::RpoNumber&);
 
 
 // A schedule represents the result of assigning nodes to basic blocks
 // and ordering them within basic blocks. Prior to computing a schedule,
 // a graph has no notion of control flow ordering other than that induced
 // by the graph's dependencies. A schedule is required to generate code.
-class Schedule FINAL : public ZoneObject {
+class V8_EXPORT_PRIVATE Schedule final : public NON_EXPORTED_BASE(ZoneObject) {
  public:
   explicit Schedule(Zone* zone, size_t node_count_hint = 0);
 
@@ -233,6 +221,10 @@ class Schedule FINAL : public ZoneObject {
   // BasicBlock building: add a goto to the end of {block}.
   void AddGoto(BasicBlock* block, BasicBlock* succ);
 
+  // BasicBlock building: add a call at the end of {block}.
+  void AddCall(BasicBlock* block, Node* call, BasicBlock* success_block,
+               BasicBlock* exception_block);
+
   // BasicBlock building: add a branch at the end of {block}.
   void AddBranch(BasicBlock* block, Node* branch, BasicBlock* tblock,
                  BasicBlock* fblock);
@@ -240,6 +232,12 @@ class Schedule FINAL : public ZoneObject {
   // BasicBlock building: add a switch at the end of {block}.
   void AddSwitch(BasicBlock* block, Node* sw, BasicBlock** succ_blocks,
                  size_t succ_count);
+
+  // BasicBlock building: add a deoptimize at the end of {block}.
+  void AddDeoptimize(BasicBlock* block, Node* input);
+
+  // BasicBlock building: add a tailcall at the end of {block}.
+  void AddTailCall(BasicBlock* block, Node* input);
 
   // BasicBlock building: add a return at the end of {block}.
   void AddReturn(BasicBlock* block, Node* input);
@@ -260,6 +258,7 @@ class Schedule FINAL : public ZoneObject {
     return AddSuccessor(block, succ);
   }
 
+  const BasicBlockVector* all_blocks() const { return &all_blocks_; }
   BasicBlockVector* rpo_order() { return &rpo_order_; }
   const BasicBlockVector* rpo_order() const { return &rpo_order_; }
 
@@ -271,6 +270,18 @@ class Schedule FINAL : public ZoneObject {
  private:
   friend class Scheduler;
   friend class BasicBlockInstrumentor;
+  friend class RawMachineAssembler;
+
+  // Ensure properties of the CFG assumed by further stages.
+  void EnsureCFGWellFormedness();
+  // Ensure split-edge form for a hand-assembled schedule.
+  void EnsureSplitEdgeForm(BasicBlock* block);
+  // Ensure entry into a deferred block happens from a single hot block.
+  void EnsureDeferredCodeSingleEntryPoint(BasicBlock* block);
+  // Move Phi operands to newly created merger blocks
+  void MovePhis(BasicBlock* from, BasicBlock* to);
+  // Copy deferred block markers down as far as possible
+  void PropagateDeferredMark();
 
   void AddSuccessor(BasicBlock* block, BasicBlock* succ);
   void MoveSuccessors(BasicBlock* from, BasicBlock* to);
@@ -288,7 +299,7 @@ class Schedule FINAL : public ZoneObject {
   DISALLOW_COPY_AND_ASSIGN(Schedule);
 };
 
-std::ostream& operator<<(std::ostream&, const Schedule&);
+V8_EXPORT_PRIVATE std::ostream& operator<<(std::ostream&, const Schedule&);
 
 }  // namespace compiler
 }  // namespace internal

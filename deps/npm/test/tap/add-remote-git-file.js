@@ -1,3 +1,5 @@
+'use strict'
+
 var fs = require('fs')
 var resolve = require('path').resolve
 var url = require('url')
@@ -16,6 +18,11 @@ var repo = resolve(__dirname, 'add-remote-git-file-repo')
 var git
 var cloneURL = 'git+file://' + resolve(pkg, 'child.git')
 
+var pjChild = JSON.stringify({
+  name: 'child',
+  version: '1.0.3'
+}, null, 2) + '\n'
+
 test('setup', function (t) {
   bootstrap()
   setup(function (er, r) {
@@ -27,13 +34,33 @@ test('setup', function (t) {
 
 test('cache from repo', function (t) {
   process.chdir(pkg)
-  var addRemoteGit = require('../../lib/cache/add-remote-git.js')
-  addRemoteGit(cloneURL, function (er, data) {
-    t.ifError(er, 'cached via git')
+  return npm.commands.cache.add(cloneURL).then((data) => {
     t.equal(
-      url.parse(data._resolved).protocol,
+      url.parse(data.manifest._resolved).protocol,
       'git+file:',
       'npm didn\'t go crazy adding git+git+git+git'
+    )
+    t.equal(data.manifest._spec.type, 'git', 'cached git')
+  })
+})
+
+test('save install', function (t) {
+  process.chdir(pkg)
+  fs.writeFileSync('package.json', JSON.stringify({
+    name: 'parent',
+    version: '5.4.3'
+  }, null, 2) + '\n')
+  var prev = npm.config.get('save')
+  npm.config.set('save', true)
+  npm.commands.install('.', [cloneURL], function (er) {
+    npm.config.set('save', prev)
+    t.ifError(er, 'npm installed via git')
+    var pj = JSON.parse(fs.readFileSync('package.json', 'utf-8'))
+    var dep = pj.dependencies.child
+    t.equal(
+      url.parse(dep).protocol,
+      'git+file:',
+      'npm didn\'t strip the git+ from git+file://'
     )
 
     t.end()
@@ -44,11 +71,6 @@ test('clean', function (t) {
   cleanup()
   t.end()
 })
-
-var pjChild = JSON.stringify({
-  name: 'child',
-  version: '1.0.3'
-}, null, 2) + '\n'
 
 function bootstrap () {
   cleanup()

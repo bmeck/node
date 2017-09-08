@@ -63,6 +63,8 @@ def GuessOS():
     return 'solaris'
   elif id == 'NetBSD':
     return 'netbsd'
+  elif id == 'AIX':
+    return 'aix'
   else:
     return None
 
@@ -85,7 +87,14 @@ def GuessArchitecture():
     return 'ia32'
   elif id == 'amd64':
     return 'ia32'
+  elif id.startswith('ppc'):
+    return 'ppc'
+  elif id == 's390x':
+    return 's390'
   else:
+    id = platform.processor()
+    if id == 'powerpc':
+      return 'ppc'
     return None
 
 

@@ -49,6 +49,7 @@ typedef struct pollfd {
 
 #include <process.h>
 #include <signal.h>
+#include <fcntl.h>
 #include <sys/stat.h>
 
 #if defined(_MSC_VER) && _MSC_VER < 1600
@@ -116,7 +117,7 @@ typedef struct pollfd {
          {0xb5367df0, 0xcbac, 0x11cf,                                         \
          {0x95, 0xca, 0x00, 0x80, 0x5f, 0x48, 0xa1, 0x92}}
 
-  typedef BOOL PASCAL (*LPFN_ACCEPTEX)
+  typedef BOOL (PASCAL *LPFN_ACCEPTEX)
                       (SOCKET sListenSocket,
                        SOCKET sAcceptSocket,
                        PVOID lpOutputBuffer,
@@ -126,7 +127,7 @@ typedef struct pollfd {
                        LPDWORD lpdwBytesReceived,
                        LPOVERLAPPED lpOverlapped);
 
-  typedef BOOL PASCAL (*LPFN_CONNECTEX)
+  typedef BOOL (PASCAL *LPFN_CONNECTEX)
                       (SOCKET s,
                        const struct sockaddr* name,
                        int namelen,
@@ -135,7 +136,7 @@ typedef struct pollfd {
                        LPDWORD lpdwBytesSent,
                        LPOVERLAPPED lpOverlapped);
 
-  typedef void PASCAL (*LPFN_GETACCEPTEXSOCKADDRS)
+  typedef void (PASCAL *LPFN_GETACCEPTEXSOCKADDRS)
                       (PVOID lpOutputBuffer,
                        DWORD dwReceiveDataLength,
                        DWORD dwLocalAddressLength,
@@ -145,13 +146,13 @@ typedef struct pollfd {
                        LPSOCKADDR* RemoteSockaddr,
                        LPINT RemoteSockaddrLength);
 
-  typedef BOOL PASCAL (*LPFN_DISCONNECTEX)
+  typedef BOOL (PASCAL *LPFN_DISCONNECTEX)
                       (SOCKET hSocket,
                        LPOVERLAPPED lpOverlapped,
                        DWORD dwFlags,
                        DWORD reserved);
 
-  typedef BOOL PASCAL (*LPFN_TRANSMITFILE)
+  typedef BOOL (PASCAL *LPFN_TRANSMITFILE)
                       (SOCKET hSocket,
                        HANDLE hFile,
                        DWORD nNumberOfBytesToWrite,
@@ -246,14 +247,20 @@ typedef union {
 } uv_cond_t;
 
 typedef union {
-  /* srwlock_ has type SRWLOCK, but not all toolchains define this type in */
-  /* windows.h. */
-  SRWLOCK srwlock_;
   struct {
-    uv_mutex_t read_mutex_;
-    uv_mutex_t write_mutex_;
     unsigned int num_readers_;
-  } fallback_;
+    CRITICAL_SECTION num_readers_lock_;
+    HANDLE write_semaphore_;
+  } state_;
+  /* TODO: remove me in v2.x. */
+  struct {
+    SRWLOCK unused_;
+  } unused1_;
+  /* TODO: remove me in v2.x. */
+  struct {
+    uv_mutex_t unused1_;
+    uv_mutex_t unused2_;
+  } unused2_;
 } uv_rwlock_t;
 
 typedef struct {
@@ -477,7 +484,8 @@ RB_HEAD(uv_timer_tree_s, uv_timer_s);
   union {                                                                     \
     struct {                                                                  \
       /* Used for readable TTY handles */                                     \
-      HANDLE read_line_handle;                                                \
+      /* TODO: remove me in v2.x. */                                          \
+      HANDLE unused_;                                                         \
       uv_buf_t read_line_buffer;                                              \
       HANDLE read_raw_wait;                                                   \
       /* Fields used for translating win keystrokes into vt100 characters */  \
@@ -627,11 +635,6 @@ RB_HEAD(uv_timer_tree_s, uv_timer_s);
   RB_ENTRY(uv_signal_s) tree_entry;                                           \
   struct uv_req_s signal_req;                                                 \
   unsigned long pending_signum;
-
-int uv_utf16_to_utf8(const WCHAR* utf16Buffer, size_t utf16Size,
-    char* utf8Buffer, size_t utf8Size);
-int uv_utf8_to_utf16(const char* utf8Buffer, WCHAR* utf16Buffer,
-    size_t utf16Size);
 
 #ifndef F_OK
 #define F_OK 0

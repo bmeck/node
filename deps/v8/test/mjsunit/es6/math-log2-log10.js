@@ -50,17 +50,20 @@ for (var i = -310; i <= 308; i += 0.5) {
 // Test denormals.
 assertEquals(-307.77759430519706, Math.log10(1.5 * Math.pow(2, -1023)));
 
+// Issue 4025.  Remove delta once issue 4029 has been fixed.
+assertEqualsDelta(-9.643274665532873e-17, Math.log10(1-Number.EPSILON), 3e-32);
+
 // Test Math.log2(2^k) for -1074 <= k <= 1023.
 var n = -1074;
 // This loop covers n from -1074 to -1043
 for (var lowbits = 1; lowbits <= 0x80000000; lowbits *= 2) {
-  var x = %_ConstructDouble(0, lowbits);
+  var x = %ConstructDouble(0, lowbits);
   assertEquals(n, Math.log2(x));
   n++;
 }
 // This loop covers n from -1042 to -1023
 for (var hibits = 1; hibits <= 0x80000; hibits *= 2) {
-  var x = %_ConstructDouble(hibits, 0);
+  var x = %ConstructDouble(hibits, 0);
   assertEquals(n, Math.log2(x));
   n++;
 }
