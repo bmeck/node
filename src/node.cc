@@ -230,6 +230,11 @@ bool config_preserve_symlinks = false;
 // that is used by lib/module.js
 bool config_experimental_modules = false;
 
+// Set in node.cc by ParseArgs when --loader is used.
+// Used in node_config.cc to set a constant on process.binding('config')
+// that is used by lib/internal/bootstrap_node.js
+std::string config_userland_loader;  // NOLINT(runtime/string)
+
 // Set by ParseArgs when --pending-deprecation or NODE_PENDING_DEPRECATION
 // is used.
 bool config_pending_deprecation = false;
@@ -3955,6 +3960,14 @@ static void ParseArgs(int* argc,
       config_preserve_symlinks = true;
     } else if (strcmp(arg, "--experimental-modules") == 0) {
       config_experimental_modules = true;
+    }  else if (strcmp(arg, "--loader") == 0) {
+      const char* module = argv[index + 1];
+      if (module == nullptr) {
+        fprintf(stderr, "%s: %s requires an argument\n", argv[0], arg);
+        exit(9);
+      }
+      args_consumed += 1;
+      config_userland_loader = module;
     } else if (strcmp(arg, "--prof-process") == 0) {
       prof_process = true;
       short_circuit = true;
