@@ -3798,6 +3798,8 @@ static void CheckIfAllowedInEnv(const char* exe, bool is_env,
     "--no-warnings",
     "--napi-modules",
     "--expose-http2",
+    "--experimental-modules",
+    "--loader",
     "--trace-warnings",
     "--redirect-warnings",
     "--trace-sync-io",
@@ -3962,6 +3964,10 @@ static void ParseArgs(int* argc,
       config_experimental_modules = true;
     }  else if (strcmp(arg, "--loader") == 0) {
       const char* module = argv[index + 1];
+      if (!config_experimental_modules) {
+        fprintf(stderr, "%s: %s requires --experimental-modules be enabled\n", argv[0], arg);
+        exit(9);
+      }
       if (module == nullptr) {
         fprintf(stderr, "%s: %s requires an argument\n", argv[0], arg);
         exit(9);
