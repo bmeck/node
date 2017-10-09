@@ -71,8 +71,8 @@ Modules will be loaded multiple times if the `import` specifier used to resolve
 them have a different query or fragment.
 
 ```js
-import './foo?query=1'; // loads ./foo with query of "?query=1"
-import './foo?query=2'; // loads ./foo with query of "?query=2"
+import './foo?query=1'; // loads ./foo with query of '?query=1'
+import './foo?query=2'; // loads ./foo with query of '?query=2'
 ```
 
 For now, only modules using the `file:` protocol can be loaded.
@@ -99,3 +99,38 @@ fs.readFile('./foo.txt', (err, body) => {
 ```
 
 [Node.js EP for ES Modules]: https://github.com/nodejs/node-eps/blob/master/002-es-modules.md
+
+### `'use exports {}'`
+
+CommonJS files are allowed to declare a `'use exports {}'` Directive Prologue in order to create named exports that can be imported using ESM import syntax.
+
+This directive prologue takes the form of:
+
+```
+'use exports {' :whitespace: :identifier: ( ( :whitespace: ',' :whitespace: :identifier: )* )? '}'
+```
+
+This prologue will have several affects.
+
+1. `module.exports` is non-writable and non-configurable.
+  Use `exports` to assign properties to names.
+2. The properties in the prologue cannot be redefined to be getters or setters.
+3. The properties in the prologue cannot be deleted.
+
+An example:
+
+```js
+// myfile.js
+'use strict';
+'use exports {default, require}';
+exports.default = exports; // act like the default CommonJS wrapper
+exports.require = require; // also provide the named export 'require'
+exports.__esModule = true; // you can define other properties outside of your named exports still
+```
+
+```js
+// myconsumer.mjs
+import {require} from './myfile.js';
+import assert from 'assert';
+assert.strictEqual(typeof require, 'function');
+```
