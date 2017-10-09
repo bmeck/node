@@ -117,6 +117,8 @@ This prologue will have several affects.
 2. The properties in the prologue cannot be redefined to be getters or setters.
 3. The properties in the prologue cannot be deleted.
 
+If no identifiers are in the prologue, not exports will appear on the ESM namespace for your module.
+
 An example:
 
 ```js
