@@ -83,6 +83,7 @@ async function ordinaryTests() {
     'function koo() { return Promise.resolve(4); }'
   ]);
   const testCases = [
+    [ 'if (true) { await 0; 1; }', '1' ],
     [ 'await Promise.resolve(0)', '0' ],
     [ '{ a: await Promise.resolve(1) }', '{ a: 1 }' ],
     [ '_', '{ a: 1 }' ],
