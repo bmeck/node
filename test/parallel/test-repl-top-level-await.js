@@ -132,7 +132,15 @@ async function ordinaryTests() {
     [ 'let o = await 1, p', 'undefined' ],
     [ 'p', 'undefined' ],
     [ 'let q = 1, s = await 2', 'undefined' ],
-    [ 's', '2' ]
+    [ 's', '2' ],
+    [ 'const x = 0; x', '0' ],
+    [ 'x = 1', 'TypeError: Assignment to constant variable.' ],
+    [ 'let x = 1; x', '1' ],
+    [ 'x = 2; x', '2' ],
+    [ 'global.x', 'undefined' ],
+    [ '"use strict"; with({}) await 0;', '0' ],
+    [ 'class foo {}', 'undefined'],
+    [ 'function foo() {}', 'undefined']
   ];
 
   for (const [input, expected, options = {}] of testCases) {

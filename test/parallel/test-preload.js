@@ -112,7 +112,11 @@ childProcess.exec(
 // test that preload works with -i
 const interactive = childProcess.exec(
   `"${nodeBinary}" ${preloadOption([fixtureD])}-i`,
+  {
+    env: {NODE_DEBUG: 'repl'}
+  },
   common.mustCall(function(err, stdout, stderr) {
+    console.log(stderr, stdout)
     assert.ifError(err);
     assert.strictEqual(stdout, "> 'test'\n> ");
   })

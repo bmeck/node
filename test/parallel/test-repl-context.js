@@ -29,13 +29,20 @@ function testContext(repl) {
 
 testContextSideEffects(repl.start({ input: stream, output: stream }));
 
-function testContextSideEffects(server) {
+async function testContextSideEffects(server) {
   assert.ok(!server.underscoreAssigned);
   assert.strictEqual(server.lines.length, 0);
 
   // an assignment to '_' in the repl server
   server.write('_ = 500;\n');
   assert.ok(server.underscoreAssigned);
+  await ({ then(f) {
+    server.output.write = common.mustCall((data) => {
+      assert.strictEqual(data.trim(), '500');
+      f();
+      server.output.write = () => {};
+    });
+  }});
   assert.strictEqual(server.lines.length, 1);
   assert.strictEqual(server.lines[0], '_ = 500;');
   assert.strictEqual(server.last, 500);
