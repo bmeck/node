@@ -131,13 +131,13 @@ async function ordinaryTests() {
     [ 'let q = 1, s = await 2', 'undefined' ],
     [ 's', '2' ],
     [ 'const x = 0; x', '0' ],
-    [ 'x = 1', 'TypeError: Assignment to constant variable.' ],
+    [ 'x = 1', 'TypeError: Assignment to constant variable.', { line: 0 } ],
     [ 'let x = 1; x', '1' ],
     [ 'x = 2; x', '2' ],
     [ 'global.x', 'undefined' ],
-    [ '"use strict"; with({}) await 0;', '0' ],
-    [ 'class foo {}', 'undefined'],
-    [ 'function foo() {}', 'undefined'],
+    [ '"use strict"; with({}) await 0;', 'SyntaxError: Strict mode code may not include a with statement', { line: 3 } ],
+    [ 'class foo {}', 'undefined' ],
+    [ 'function foo() {}', 'undefined' ],
     [ 'if (true) { await 0; 1; }', '1' ],
   ];
 
@@ -155,17 +155,18 @@ async function ordinaryTests() {
 }
 
 async function ctrlCTest() {
-  putIn.run([
-    `const timeout = (msecs) => new Promise((resolve) => {
-       setTimeout(resolve, msecs).unref();
-     });`
-  ]);
-
   console.log('Testing Ctrl+C');
-  assert.deepStrictEqual(await runAndWait([
+  const out = await runAndWait([
+    `const timeout = (msecs) => new Promise((resolve) => {
+      setTimeout(resolve, msecs).unref();
+    });`,
     'await timeout(100000)',
     { ctrl: true, name: 'c' }
-  ]), [
+  ]);
+  assert.deepStrictEqual(out, [
+    'const timeout = (msecs) => new Promise((resolve) => {\r',
+    '...       setTimeout(resolve, msecs).unref();\r',
+    '...     });\r',
     'await timeout(100000)\r',
     'Thrown: Error: Script execution interrupted.',
     PROMPT
