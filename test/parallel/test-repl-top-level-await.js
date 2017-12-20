@@ -41,7 +41,7 @@ class REPLStream extends common.ArrayStream {
         this.removeListener('line', onLine);
         reject(err);
       };
-      const onLine = () => {
+      const onLine = (line) => {
         if (this.lines[this.lines.length - 1].includes(lookFor)) {
           this.removeListener('error', onError);
           this.removeListener('line', onLine);
@@ -78,12 +78,9 @@ function runAndWait(cmds, lookFor) {
 async function ordinaryTests() {
   // These tests were created based on
   // https://cs.chromium.org/chromium/src/third_party/WebKit/LayoutTests/http/tests/devtools/console/console-top-level-await.js?rcl=5d0ea979f0ba87655b7ef0e03b58fa3c04986ba6
-  putIn.run([
-    'function foo(x) { return x; }',
-    'function koo() { return Promise.resolve(4); }'
-  ]);
   const testCases = [
-    [ 'if (true) { await 0; 1; }', '1' ],
+    ['function foo(x) { return x; }', 'undefined'],
+    ['function koo() { return Promise.resolve(4); }', 'undefined'],
     [ 'await Promise.resolve(0)', '0' ],
     [ '{ a: await Promise.resolve(1) }', '{ a: 1 }' ],
     [ '_', '{ a: 1 }' ],
@@ -140,7 +137,8 @@ async function ordinaryTests() {
     [ 'global.x', 'undefined' ],
     [ '"use strict"; with({}) await 0;', '0' ],
     [ 'class foo {}', 'undefined'],
-    [ 'function foo() {}', 'undefined']
+    [ 'function foo() {}', 'undefined'],
+    [ 'if (true) { await 0; 1; }', '1' ],
   ];
 
   for (const [input, expected, options = {}] of testCases) {
