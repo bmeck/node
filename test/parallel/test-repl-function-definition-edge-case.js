@@ -11,11 +11,13 @@ const r = initRepl();
 
 r.input.emit('data', 'function a() { return 42; } (1)\n');
 r.input.emit('data', 'a\n');
-r.input.emit('data', '.exit');
 
 const expected = '1\n[Function: a]\n';
-const got = r.output.accumulator.join('');
-assert.strictEqual(got, expected);
+r.close();
+r.on('exit', common.mustCall(() => {
+  const got = r.output.accumulator.join('');
+  assert.strictEqual(got, expected);
+}));
 
 function initRepl() {
   const input = new stream();
@@ -25,8 +27,11 @@ function initRepl() {
   const output = new stream();
   output.writable = true;
   output.accumulator = [];
+  global.accumulator = output.accumulator;
 
-  output.write = (data) => output.accumulator.push(data);
+  output.write = (data) => {
+    output.accumulator.push(data);
+  }
 
   return repl.start({
     input,
