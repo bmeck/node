@@ -71,13 +71,22 @@ static void InitConfig(Local<Object> target,
 
   if (config_experimental_modules) {
     READONLY_BOOLEAN_PROPERTY("experimentalModules");
-    if (!config_userland_loader.empty()) {
+    if (!config_userland_loaders.empty()) {
+      auto loaders = v8::Array::New(isolate, config_userland_loaders.size());
+      for (size_t i = 0; i < config_userland_loaders.size(); i++) {
+        auto item = config_userland_loaders[i];
+        loaders->Set(
+          i,
+          String::NewFromUtf8(isolate,
+                              item.data(),
+                              v8::NewStringType::kNormal).ToLocalChecked());
+      }
+
+      loaders->SetIntegrityLevel(context, v8::IntegrityLevel::kFrozen);
       target->DefineOwnProperty(
           context,
-          FIXED_ONE_BYTE_STRING(isolate, "userLoader"),
-          String::NewFromUtf8(isolate,
-                              config_userland_loader.data(),
-                              v8::NewStringType::kNormal).ToLocalChecked(),
+          FIXED_ONE_BYTE_STRING(isolate, "userLoaders"),
+          loaders,
           ReadOnly).FromJust();
     }
   }

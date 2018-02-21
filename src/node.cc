@@ -246,7 +246,7 @@ bool config_experimental_vm_modules = false;
 // Set in node.cc by ParseArgs when --loader is used.
 // Used in node_config.cc to set a constant on process.binding('config')
 // that is used by lib/internal/bootstrap_node.js
-std::string config_userland_loader;  // NOLINT(runtime/string)
+std::vector<std::string> config_userland_loaders;
 
 // Set by ParseArgs when --pending-deprecation or NODE_PENDING_DEPRECATION
 // is used.
@@ -3745,7 +3745,7 @@ static void ParseArgs(int* argc,
         exit(9);
       }
       args_consumed += 1;
-      config_userland_loader = module;
+      config_userland_loaders.push_back(module);
     } else if (strcmp(arg, "--prof-process") == 0) {
       prof_process = true;
       short_circuit = true;

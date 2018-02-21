@@ -7,17 +7,21 @@ const builtins = new Set(
 const baseURL = new _url.URL('file://');
 baseURL.pathname = process.cwd() + '/';
 
-export function resolve (specifier, base = baseURL) {
-  if (builtins.has(specifier)) {
-    return {
-      url: specifier,
-      format: 'builtin'
-    };
-  }
-  // load all dependencies as esm, regardless of file extension
-  const url = new _url.URL(specifier, base).href;
+export default ({ resolve: parentResolve }) => {
   return {
-    url,
-    format: 'esm'
+    resolve(specifier, base = baseURL) {
+      if (builtins.has(specifier)) {
+        return {
+          url: specifier,
+          format: 'builtin'
+        };
+      }
+      // load all dependencies as esm, regardless of file extension
+      const url = new _url.URL(specifier, base).href;
+      return {
+        url,
+        format: 'esm'
+      };
+    }
   };
 }

@@ -182,7 +182,7 @@ extern bool config_experimental_vm_modules;
 // Set in node.cc by ParseArgs when --loader is used.
 // Used in node_config.cc to set a constant on process.binding('config')
 // that is used by lib/internal/bootstrap_node.js
-extern std::string config_userland_loader;
+extern std::vector<std::string> config_userland_loaders;
 
 // Set in node.cc by ParseArgs when --expose-internals or --expose_internals is
 // used.

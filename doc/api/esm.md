@@ -106,10 +106,20 @@ fs.readFile('./foo.txt', (err, body) => {
 <!-- type=misc -->
 
 To customize the default module resolution, loader hooks can optionally be
-provided via a `--loader ./loader-name.mjs` argument to Node.
+provided via a `--loader ./loader-name.mjs` argument to Node. This argument
+can be passed multiple times to compose loaders like
+`--loader ./loader-coverage.mjs --loader ./loader-mocking.mjs`. The last loader
+will be used for module loading and must explicitly call to the parent loader
+in order to provide compose behavior.
 
 When hooks are used they only apply to ES module loading and not to any
 CommonJS modules loaded.
+
+All loaders are created by invoking the default export of their module as a
+function. The parameters given to the the function is a single object with
+properties to call the `resolve` and `dynamicInstantiate` hooks of the parent
+loader. The default loader has a `resolve` hook and `null` for the value
+`dynamicInstantiate`.
 
 ### Resolve hook
 
@@ -120,12 +130,15 @@ given module specifier and parent file URL:
 const baseURL = new URL('file://');
 baseURL.pathname = `${process.cwd()}/`;
 
-export async function resolve(specifier,
-                              parentModuleURL = baseURL,
-                              defaultResolver) {
+export default function (parent) {
   return {
-    url: new URL(specifier, parentModuleURL).href,
-    format: 'esm'
+    async resolve(specifier,
+                  parentModuleURL = baseURL) {
+      return {
+        url: new URL(specifier, parentModuleURL).href,
+        format: 'esm'
+      };
+    }
   };
 }
 ```
@@ -164,28 +177,32 @@ const JS_EXTENSIONS = new Set(['.js', '.mjs']);
 const baseURL = new URL('file://');
 baseURL.pathname = `${process.cwd()}/`;
 
-export function resolve(specifier, parentModuleURL = baseURL, defaultResolve) {
-  if (builtins.includes(specifier)) {
-    return {
-      url: specifier,
-      format: 'builtin'
-    };
-  }
-  if (/^\.{0,2}[/]/.test(specifier) !== true && !specifier.startsWith('file:')) {
-    // For node_modules support:
-    // return defaultResolve(specifier, parentModuleURL);
-    throw new Error(
-      `imports must begin with '/', './', or '../'; '${specifier}' does not`);
-  }
-  const resolved = new URL(specifier, parentModuleURL);
-  const ext = path.extname(resolved.pathname);
-  if (!JS_EXTENSIONS.has(ext)) {
-    throw new Error(
-      `Cannot load file with non-JavaScript file extension ${ext}.`);
-  }
+export default function (parent) {
   return {
-    url: resolved.href,
-    format: 'esm'
+    resolve(specifier, parentModuleURL = baseURL) {
+      if (builtins.includes(specifier)) {
+        return {
+          url: specifier,
+          format: 'builtin'
+        };
+      }
+      if (/^\.{0,2}[/]/.test(specifier) !== true && !specifier.startsWith('file:')) {
+        // For node_modules support:
+        // return parent.resolve(specifier, parentModuleURL);
+        throw new Error(
+          `imports must begin with '/', './', or '../'; '${specifier}' does not`);
+      }
+      const resolved = new URL(specifier, parentModuleURL);
+      const ext = path.extname(resolved.pathname);
+      if (!JS_EXTENSIONS.has(ext)) {
+        throw new Error(
+          `Cannot load file with non-JavaScript file extension ${ext}.`);
+      }
+      return {
+        url: resolved.href,
+        format: 'esm'
+      };
+    }
   };
 }
 ```
@@ -207,12 +224,16 @@ This hook is called only for modules that return `format: "dynamic"` from
 the `resolve` hook.
 
 ```js
-export async function dynamicInstantiate(url) {
+export default function (parent) {
   return {
-    exports: ['customExportName'],
-    execute: (exports) => {
-      // get and set functions provided for pre-allocated export names
-      exports.customExportName.set('value');
+    dynamicInstantiate(url) {
+      return {
+        exports: ['customExportName'],
+        execute: (exports) => {
+          // get and set functions provided for pre-allocated export names
+          exports.customExportName.set('value');
+        }
+      };
     }
   };
 }

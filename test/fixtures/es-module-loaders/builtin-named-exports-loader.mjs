@@ -5,25 +5,31 @@ const builtins = new Set(
     /^(?!(?:internal|node|v8)\/)/.test(str))
 );
 
-export function dynamicInstantiate(url) {
-  const builtinInstance = module._load(url.substr(5));
-  const builtinExports = ['default', ...Object.keys(builtinInstance)];
+export default ({
+  resolve: parentResolve
+}) => {
   return {
-    exports: builtinExports,
-    execute: exports => {
-      for (let name of builtinExports)
-        exports[name].set(builtinInstance[name]);
-      exports.default.set(builtinInstance);
+    dynamicInstantiate(url) {
+      const builtinInstance = module._load(url.substr(5));
+      const builtinExports = ['default', ...Object.keys(builtinInstance)];
+      return {
+        exports: builtinExports,
+        execute: exports => {
+          for (let name of builtinExports)
+            exports[name].set(builtinInstance[name]);
+          exports.default.set(builtinInstance);
+        }
+      };
+    },
+
+    resolve(specifier, base) {
+      if (builtins.has(specifier)) {
+        return {
+          url: `node:${specifier}`,
+          format: 'dynamic'
+        };
+      }
+      return parentResolve(specifier, base);
     }
   };
-}
-
-export function resolve(specifier, base, defaultResolver) {
-  if (builtins.has(specifier)) {
-    return {
-      url: `node:${specifier}`,
-      format: 'dynamic'
-    };
-  }
-  return defaultResolver(specifier, base);
 }

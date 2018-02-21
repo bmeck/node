@@ -1,7 +1,11 @@
 import dep from './loader-dep.js';
-export function resolve (specifier, base, defaultResolve) {
+export default ({ resolve: parentResolve }) => {
   return {
-    url: defaultResolve(specifier, base).url,
-    format: dep.format
+    async resolve(specifier, base, defaultResolve) {
+      return {
+        url: (await parentResolve(specifier, base)).url,
+        format: dep.format
+      };
+    }
   };
 }
