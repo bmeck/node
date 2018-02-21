@@ -24,7 +24,7 @@ const dependency = path.join(__dirname, 'esm-export-url.mjs');
       logger,
     ],
     {
-      stdio: 'pipe',
+      stdio: 'pipe'
     }
   );
   assert.strictEqual(result.status, 0);
@@ -46,7 +46,7 @@ const dependency = path.join(__dirname, 'esm-export-url.mjs');
       logger,
     ],
     {
-      stdio: 'pipe',
+      stdio: 'pipe'
     }
   );
   assert.strictEqual(result.status, 0);
