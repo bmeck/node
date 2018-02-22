@@ -1229,6 +1229,11 @@ An attempt was made to open an IPC communication channel with a synchronously
 forked Node.js process. See the documentation for the [`child_process`][] module
 for more information.
 
+<a id="ERR_LOADER_HOOK_BAD_TYPE"></a>
+### ERR_LOADER_HOOK_BAD_TYPE
+
+An Loader defined an invalid value for a hook. See the documentation for [ECMAScript Modules][] for more information.
+
 <a id="ERR_METHOD_NOT_IMPLEMENTED"></a>
 ### ERR_METHOD_NOT_IMPLEMENTED
 
@@ -1630,6 +1635,7 @@ Creation of a [`zlib`][] object failed due to incorrect configuration.
 [`cipher.getAuthTag()`]: crypto.html#crypto_cipher_getauthtag
 [`crypto.timingSafeEqual()`]: crypto.html#crypto_crypto_timingsafeequal_a_b
 [`dgram.createSocket()`]: dgram.html#dgram_dgram_createsocket_options_callback
+[ECMAScript Modules]: esm.html
 [`ERR_INVALID_ARG_TYPE`]: #ERR_INVALID_ARG_TYPE
 [`EventEmitter`]: events.html#events_class_eventemitter
 [`fs.symlink()`]: fs.html#fs_fs_symlink_target_path_type_callback

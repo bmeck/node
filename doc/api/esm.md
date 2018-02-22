@@ -129,7 +129,7 @@ given module specifier and parent file URL:
 const baseURL = new URL('file://');
 baseURL.pathname = `${process.cwd()}/`;
 
-export default function (parent) {
+export default function(parent) {
   return {
     async resolve(specifier,
                   parentModuleURL = baseURL) {
@@ -176,7 +176,7 @@ const JS_EXTENSIONS = new Set(['.js', '.mjs']);
 const baseURL = new URL('file://');
 baseURL.pathname = `${process.cwd()}/`;
 
-export default function (parent) {
+export default function(parent) {
   return {
     resolve(specifier, parentModuleURL = baseURL) {
       if (builtins.includes(specifier)) {
@@ -185,7 +185,8 @@ export default function (parent) {
           format: 'builtin'
         };
       }
-      if (/^\.{0,2}[/]/.test(specifier) !== true && !specifier.startsWith('file:')) {
+      if (/^\.{0,2}[/]/.test(specifier) !== true &&
+        !specifier.startsWith('file:')) {
         // For node_modules support:
         // return parent.resolve(specifier, parentModuleURL);
         throw new Error(
@@ -223,7 +224,7 @@ This hook is called only for modules that return `format: "dynamic"` from
 the `resolve` hook.
 
 ```js
-export default function (parent) {
+export default function(parent) {
   return {
     dynamicInstantiate(url) {
       return {

@@ -75,14 +75,14 @@ static void InitConfig(Local<Object> target,
       auto loaders = v8::Array::New(isolate, config_userland_loaders.size());
       for (size_t i = 0; i < config_userland_loaders.size(); i++) {
         auto item = config_userland_loaders[i];
-        loaders->Set(
-          i,
-          String::NewFromUtf8(isolate,
+        auto user_loader = String::NewFromUtf8(isolate,
                               item.data(),
-                              v8::NewStringType::kNormal).ToLocalChecked());
+                              v8::NewStringType::kNormal).ToLocalChecked();
+        loaders->Set(context, i, user_loader).FromJust();
       }
 
-      loaders->SetIntegrityLevel(context, v8::IntegrityLevel::kFrozen);
+      loaders->SetIntegrityLevel(context, v8::IntegrityLevel::kFrozen)
+          .FromJust();
       target->DefineOwnProperty(
           context,
           FIXED_ONE_BYTE_STRING(isolate, "userLoaders"),
