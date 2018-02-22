@@ -106,7 +106,7 @@ fs.readFile('./foo.txt', (err, body) => {
 <!-- type=misc -->
 
 To customize the default module resolution, loader hooks can optionally be
-provided via a `--loader ./loader-name.mjs` argument to Node. This argument
+provided via a `--loader ./loader-name.mjs` argument to Node.js. This argument
 can be passed multiple times to compose loaders like
 `--loader ./loader-coverage.mjs --loader ./loader-mocking.mjs`. The last loader
 must explicitly call to the parent loader in order to provide compose behavior.
@@ -115,7 +115,7 @@ When hooks are used they only apply to ES module loading and not to any
 CommonJS modules loaded.
 
 All loaders are created by invoking the default export of their module as a
-function. The parameters given to the the function is a single object with
+function. The parameters given to the function are a single object with
 properties to call the `resolve` and `dynamicInstantiate` hooks of the parent
 loader. The default loader has a `resolve` hook and a function that throws for
 the value of `dynamicInstantiate`.
