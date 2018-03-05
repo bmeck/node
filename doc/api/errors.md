@@ -1249,6 +1249,13 @@ strict compliance with the API specification (which in some cases may accept
 `func(undefined)` and `func()` are treated identically, and the
 [`ERR_INVALID_ARG_TYPE`][] error code may be used instead.
 
+<a id="ERR_MISSING_DYNAMIC_INSTANTIATE_HOOK"></a>
+### ERR_MISSING_DYNAMIC_INSTANTIATE_HOOK
+
+A Loader resolved an import to a "dynamic" format, but no hook for
+`dynamicInstantiate` was declared. See Loader hook documentation in
+[ECMAScript Modules][].
+
 <a id="ERR_MISSING_MODULE"></a>
 ### ERR_MISSING_MODULE
 
