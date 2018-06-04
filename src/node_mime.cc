@@ -220,13 +220,13 @@ MIME::MIME(const std::string& src) {
           if (c == ';') {
             break;
           } else {
-            bool is_2_byte = (c & (unsigned char)0xE0) == 0xC0;
-            bool is_3_byte = (c & (unsigned char)0xF0) == 0xE0;
-            bool is_4_byte = (c & (unsigned char)0xF8) == 0xF0;
+            bool is_2_byte = (c & static_cast<unsigned char>(0xE0)) == 0xC0;
+            bool is_3_byte = (c & static_cast<unsigned char>(0xF0)) == 0xE0;
+            bool is_4_byte = (c & static_cast<unsigned char>(0xF8)) == 0xF0;
             bool is_invalid = false;
             if (is_2_byte) {
               // need 2 bits of FF
-              if ((c & (unsigned char)0x1C) != 0) {
+              if ((c & static_cast<unsigned char>(0x1C)) != 0) {
                 is_invalid = true;
                 right += 1;
               } else {
