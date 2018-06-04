@@ -115,6 +115,7 @@ struct sockaddr;
     V(inspector)                                                              \
     V(js_stream)                                                              \
     V(messaging)                                                              \
+    V(mime_wrap)                                                              \
     V(module_wrap)                                                            \
     V(os)                                                                     \
     V(performance)                                                            \
