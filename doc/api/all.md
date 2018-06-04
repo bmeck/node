@@ -25,6 +25,7 @@
 @include https
 @include inspector
 @include intl
+@include mime
 @include modules
 @include net
 @include os
