@@ -88,9 +88,6 @@ MIME::MIME(const std::string& src) {
     char c = src[left];
     if (!is_ascii_whitespace(c)) break;
   }
-  std::string& type = type_;
-  std::string& subtype = subtype_;
-  std::vector<std::pair<std::string, std::string>>& parameters = parameters_;
   size_t right = left;
   for (; right < src.size(); right++) {
     char c = src[right];
@@ -99,14 +96,14 @@ MIME::MIME(const std::string& src) {
         flags_ |= MIME_FLAGS_INVALID_TYPE;
         return;
       }
-      type = src.substr(left, right - left);
+      type_ = src.substr(left, right - left);
       break;
     } else if (!saw_invalid_char && !is_http_token(c)) {
       saw_invalid_char = true;
       first_invalid_char = right;
     }
   }
-  if (type.size() == 0) {
+  if (type_.size() == 0) {
     flags_ |= MIME_FLAGS_INVALID_TYPE;
     return;
   }
@@ -132,7 +129,7 @@ MIME::MIME(const std::string& src) {
       if (is_ascii_whitespace(src[trim_right - 1])) {
         trim_right--;
       } else {
-        subtype = src.substr(left, trim_right - left);
+        subtype_ = src.substr(left, trim_right - left);
         break;
       }
     }
@@ -141,14 +138,14 @@ MIME::MIME(const std::string& src) {
       return;
     }
   }
-  if (subtype.size() == 0) {
+  if (subtype_.size() == 0) {
     flags_ |= MIME_FLAGS_INVALID_SUBTYPE;
     return;
   }
-  std::transform(type.begin(), type.end(), type.begin(), ToLower);
-  std::transform(subtype.begin(),
-                 subtype.end(),
-                 subtype.begin(),
+  std::transform(type_.begin(), type_.end(), type_.begin(), ToLower);
+  std::transform(subtype_.begin(),
+                 subtype_.end(),
+                 subtype_.begin(),
                  ToLower);
   while (right <= src.size()) {
     right++;   // ;
@@ -272,7 +269,7 @@ MIME::MIME(const std::string& src) {
     if (parameter_name.size() > 0 &&
         parameter_value.size() > 0 &&
         !saw_invalid_value) {
-      parameters.push_back({ parameter_name, parameter_value });
+      parameters_.push_back({ parameter_name, parameter_value });
     }
   }
 }
