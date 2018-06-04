@@ -1,8 +1,10 @@
 #include <string>
-#include "node.h"
 #include "env.h"
+#include "node.h"
 #include "node_mime.h"
 #include "node_internals.h"
+#include "util-inl.h"
+
 namespace node {
 
 namespace mime {
@@ -26,22 +28,23 @@ namespace {
 bool is_ascii_upper_alpha(char c) {
   return c >= '\x41' && c <= '\x5A';
 }
+
 bool is_ascii_lower_alpha(char c) {
   return c >= '\x61' && c <= '\x7A';
 }
+
 bool is_ascii_digit(char c) {
   return c >= '\x30' && c <= '\x39';
 }
+
 bool is_ascii_alpha(char c) {
   return is_ascii_upper_alpha(c) || is_ascii_lower_alpha(c);
 }
+
 bool is_ascii_alphanumeric(char c) {
   return is_ascii_digit(c) || is_ascii_alpha(c);
 }
-char to_ascii_lower(char c) {
-  if (!is_ascii_upper_alpha(c)) return c;
-  return c + 0x20;
-}
+
 bool is_http_token(char c) {
   return c == '\x21' ||
       c == '\x23' ||
@@ -60,6 +63,7 @@ bool is_http_token(char c) {
       c == '\x7E' ||
       is_ascii_alphanumeric(c);
 }
+
 bool is_ascii_whitespace(char c) {
   return c == '\x09' ||
       c == '\x0A' ||
@@ -67,6 +71,7 @@ bool is_ascii_whitespace(char c) {
       c == '\x0D' ||
       c == '\x20';
 }
+
 bool is_http_quoted_string_token(char c) {
   return c == '\x09' ||
       (c >= '\x20' && c <= '\x7E') ||
@@ -75,23 +80,23 @@ bool is_http_quoted_string_token(char c) {
 
 }   // anonymous namespace
 
-MIME::MIME(std::string src) {
+MIME::MIME(const std::string& src) {
   size_t left = 0;
-  auto saw_invalid_char = false;
+  bool saw_invalid_char = false;
   size_t first_invalid_char = 0;
   for (; left < src.size(); left++) {
-    auto c = src[left];
+    char c = src[left];
     if (!is_ascii_whitespace(c)) break;
   }
   std::string& type = type_;
   std::string& subtype = subtype_;
-  auto& parameters = parameters_;
+  std::vector<std::pair<std::string, std::string>>& parameters = parameters_;
   size_t right = left;
   for (; right < src.size(); right++) {
-    auto c = src[right];
+    char c = src[right];
     if (c == '/') {
       if (left == right || right >= src.size() || saw_invalid_char) {
-        this->flags_ |= MIME_FLAGS_INVALID_TYPE;
+        flags_ |= MIME_FLAGS_INVALID_TYPE;
         return;
       }
       type = src.substr(left, right - left);
@@ -102,17 +107,17 @@ MIME::MIME(std::string src) {
     }
   }
   if (type.size() == 0) {
-    this->flags_ |= MIME_FLAGS_INVALID_TYPE;
+    flags_ |= MIME_FLAGS_INVALID_TYPE;
     return;
   }
   saw_invalid_char = false;
   right++;
   left = right;
   for (; right < src.size(); right++) {
-    auto c = src[right];
+    char c = src[right];
     if (c == ';') {
       if (left == right) {
-        this->flags_ |= MIME_FLAGS_INVALID_SUBTYPE;
+        flags_ |= MIME_FLAGS_INVALID_SUBTYPE;
         return;
       }
       break;
@@ -122,7 +127,7 @@ MIME::MIME(std::string src) {
     }
   }
   {
-    auto trim_right = right;
+    size_t trim_right = right;
     while (trim_right > left) {
       if (is_ascii_whitespace(src[trim_right - 1])) {
         trim_right--;
@@ -132,43 +137,43 @@ MIME::MIME(std::string src) {
       }
     }
     if (saw_invalid_char && first_invalid_char < trim_right) {
-      this->flags_ |= MIME_FLAGS_INVALID_SUBTYPE;
+      flags_ |= MIME_FLAGS_INVALID_SUBTYPE;
       return;
     }
   }
   if (subtype.size() == 0) {
-    this->flags_ |= MIME_FLAGS_INVALID_SUBTYPE;
+    flags_ |= MIME_FLAGS_INVALID_SUBTYPE;
     return;
   }
-  std::transform(type.begin(), type.end(), type.begin(), to_ascii_lower);
+  std::transform(type.begin(), type.end(), type.begin(), ToLower);
   std::transform(subtype.begin(),
-                  subtype.end(),
-                  subtype.begin(),
-                  to_ascii_lower);
+                 subtype.end(),
+                 subtype.begin(),
+                 ToLower);
   while (right <= src.size()) {
     right++;   // ;
     for (; right < src.size(); right++) {
-      auto c = src[right];
+      char c = src[right];
       if (!is_ascii_whitespace(c)) break;
     }
     left = right;
     saw_invalid_char = false;
     for (; right < src.size(); right++) {
-      auto c = src[right];
+      char c = src[right];
       if (c == ';'|| c == '=') {
         break;
       } else if (!is_http_token(c)) {
         saw_invalid_char = true;
       }
     }
-    std::string parameterName;
+    std::string parameter_name;
     if (right < src.size()) {
       if (!saw_invalid_char) {
-        parameterName = src.substr(left, right - left);
-        std::transform(parameterName.begin(),
-                        parameterName.end(),
-                        parameterName.begin(),
-                        to_ascii_lower);
+        parameter_name = src.substr(left, right - left);
+        std::transform(parameter_name.begin(),
+                       parameter_name.end(),
+                       parameter_name.begin(),
+                       ToLower);
       }
       if (src[right] == ';') {
         continue;
@@ -177,29 +182,29 @@ MIME::MIME(std::string src) {
       left = right;
     }
     bool saw_invalid_value = false;
-    std::string parameterValue;
+    std::string parameter_value;
     if (right < src.size()) {
       if (src[right] == '"') {
         right++;
         while (true) {
           left = right;
           for (; right < src.size(); right++) {
-            auto c = src[right];
+            char c = src[right];
             if (c == '"' || c == '\\') {
               break;
             } else if (!is_http_quoted_string_token(c)) {
               saw_invalid_value = true;
             }
           }
-          parameterValue += src.substr(left, right - left);
+          parameter_value += src.substr(left, right - left);
           if (right < src.size() && src[right] == '\\') {
             right++;
             if (right < src.size()) {
-              parameterValue += src[right];
+              parameter_value += src[right];
               right++;
               continue;
             } else {
-              parameterValue += '\\';
+              parameter_value += '\\';
               break;
             }
           } else {
@@ -207,20 +212,20 @@ MIME::MIME(std::string src) {
           }
         }
         for (; right < src.size(); right++) {
-          auto c = src[right];
+          char c = src[right];
           if (c == ';') {
             break;
           }
         }
       } else {
         for (; right < src.size(); right++) {
-          auto c = src[right];
+          char c = src[right];
           if (c == ';') {
             break;
           } else {
-            auto is_2_byte = (c & (unsigned char)0xE0) == 0xC0;
-            auto is_3_byte = (c & (unsigned char)0xF0) == 0xE0;
-            auto is_4_byte = (c & (unsigned char)0xF8) == 0xF0;
+            bool is_2_byte = (c & (unsigned char)0xE0) == 0xC0;
+            bool is_3_byte = (c & (unsigned char)0xF0) == 0xE0;
+            bool is_4_byte = (c & (unsigned char)0xF8) == 0xF0;
             bool is_invalid = false;
             if (is_2_byte) {
               // need 2 bits of FF
@@ -254,22 +259,20 @@ MIME::MIME(std::string src) {
           }
         }
         {
-          auto trim_right = right;
+          size_t trim_right = right;
           while (is_ascii_whitespace(src[trim_right - 1])) {
             trim_right--;
           }
           if (!saw_invalid_char || first_invalid_char >= trim_right) {
-            parameterValue = src.substr(left, trim_right - left);
+            parameter_value = src.substr(left, trim_right - left);
           }
         }
       }
     }
-    if (parameterName.size() > 0 &&
-        parameterValue.size() > 0 &&
+    if (parameter_name.size() > 0 &&
+        parameter_value.size() > 0 &&
         !saw_invalid_value) {
-      parameters.push_back(std::pair<std::string, std::string>(
-          parameterName,
-          parameterValue));
+      parameters.push_back({ parameter_name, parameter_value });
     }
   }
 }
@@ -277,10 +280,11 @@ MIME::MIME(std::string src) {
 
 void MIMEParser::Parse(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
-  auto context = env->context();
-
   Isolate* isolate = args.GetIsolate();
   HandleScope scope(isolate);
+
+  Local<Context> context = env->context();
+
 
   if (args.IsConstructCall()) {
     env->ThrowError("parse() must not be called using new");
@@ -296,7 +300,7 @@ void MIMEParser::Parse(const FunctionCallbackInfo<Value>& args) {
     return;
   }
 
-  auto that = args[1]->ToObject();
+  Local<Object> dataSink = args[1].As<Object>();
 
   Local<String> string = args[0].As<String>();
   v8::String::Utf8Value source(isolate, string);
@@ -308,9 +312,9 @@ void MIMEParser::Parse(const FunctionCallbackInfo<Value>& args) {
     return;
   }
 
-  auto type_key = FIXED_ONE_BYTE_STRING(isolate, "type");
-  auto subtype_key = FIXED_ONE_BYTE_STRING(isolate, "subtype");
-  auto parameters_key = FIXED_ONE_BYTE_STRING(isolate, "parameters");
+  Local<String> type_key = FIXED_ONE_BYTE_STRING(isolate, "type");
+  Local<String> subtype_key = FIXED_ONE_BYTE_STRING(isolate, "subtype");
+  Local<String> parameters_key = FIXED_ONE_BYTE_STRING(isolate, "parameters");
   Local<String> type =
       String::NewFromUtf8(isolate,
                           mime.type_.c_str(),
@@ -321,33 +325,33 @@ void MIMEParser::Parse(const FunctionCallbackInfo<Value>& args) {
                           mime.subtype_.c_str(),
                           v8::NewStringType::kInternalized,
                           mime.subtype_.length()).ToLocalChecked();
-  that->Set(type_key, type);
-  that->Set(subtype_key, subtype);
+  dataSink->Set(context, type_key, type);
+  dataSink->Set(context, subtype_key, subtype);
 
-  auto parameters = Array::New(isolate, mime.parameters_.size());
-  auto i = 0;
-  for (auto pair : mime.parameters_) {
-    auto key_str = pair.first;
-    auto value_str = pair.second;
-    auto key =
+  Local<Array> parameters = Array::New(isolate, mime.parameters_.size());
+  size_t i = 0;
+  for (const auto& pair : mime.parameters_) {
+    const std::string& key_str = pair.first;
+    const std::string& value_str = pair.second;
+    Local<String> key =
         String::NewFromUtf8(isolate,
                             key_str.c_str(),
                             v8::NewStringType::kInternalized,
                             key_str.length()).ToLocalChecked();
-    auto value =
+    Local<String> value =
         String::NewFromUtf8(isolate,
                             value_str.c_str(),
                             v8::NewStringType::kInternalized,
                             value_str.length()).ToLocalChecked();
-    auto pair_arr = Array::New(isolate, 2);
+    Local<Array> pair_arr = Array::New(isolate, 2);
     pair_arr->Set(context, 0, key);
     pair_arr->Set(context, 1, value);
     parameters->Set(context, i, pair_arr);
     i++;
   }
-  that->Set(parameters_key, parameters);
+  dataSink->Set(context, parameters_key, parameters);
 
-  args.GetReturnValue().Set(that);
+  args.GetReturnValue().Set(dataSink);
 }
 
 void MIMEParser::Initialize(Local<Object> target,

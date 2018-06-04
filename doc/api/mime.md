@@ -22,8 +22,7 @@ The `mime` module provides a single API for working with MIMEs based upon the [W
 Parsing a MIME string using the WHATWG parsing algorithm:
 
 ```js
-const myMIME =
-  new MIME('text/javascript; goal=script');
+const myMIME = new MIME('text/javascript; goal=script');
 ```
 
 ## The MIME API

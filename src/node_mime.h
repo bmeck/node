@@ -22,7 +22,7 @@ enum mime_flags {
 
 class MIME {
  public:
-  explicit MIME(std::string src);
+  explicit MIME(const std::string& src);
 
   MIME(const MIME&) = default;
   MIME& operator=(const MIME&) = default;
