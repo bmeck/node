@@ -240,6 +240,7 @@ struct PackageConfig {
   V(output_string, "output")                                                  \
   V(order_string, "order")                                                    \
   V(owner_string, "owner")                                                    \
+  V(parameters_string, "parameters")                                          \
   V(parse_error_string, "Parse Error")                                        \
   V(password_string, "password")                                              \
   V(path_string, "path")                                                      \
@@ -284,6 +285,7 @@ struct PackageConfig {
   V(stdio_string, "stdio")                                                    \
   V(subject_string, "subject")                                                \
   V(subjectaltname_string, "subjectaltname")                                  \
+  V(subtype_string, "subtype")                                                \
   V(syscall_string, "syscall")                                                \
   V(thread_id_string, "threadId")                                             \
   V(ticketkeycallback_string, "onticketkeycallback")                          \

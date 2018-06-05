@@ -22,7 +22,7 @@ enum mime_flags {
 
 class MIME {
  public:
-  explicit MIME(const std::string& src);
+  explicit MIME(const char* source, size_t length);
 
   MIME(const MIME&) = default;
   MIME& operator=(const MIME&) = default;
@@ -44,7 +44,6 @@ class MIMEParser {
 };
 
 }  // namespace mime
-
 }  // namespace node
 
 #endif  // defined(NODE_WANT_INTERNALS) && NODE_WANT_INTERNALS

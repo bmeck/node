@@ -6,7 +6,6 @@
 #include "util-inl.h"
 
 namespace node {
-
 namespace mime {
 
 using v8::Array;
@@ -22,7 +21,6 @@ using v8::String;
 using v8::Value;
 
 
-// utilities for
 namespace {
 
 bool is_ascii_upper_alpha(char c) {
@@ -80,38 +78,38 @@ bool is_http_quoted_string_token(char c) {
 
 }   // anonymous namespace
 
-MIME::MIME(const std::string& src) {
+MIME::MIME(const char* source, size_t length) {
   size_t left = 0;
   bool saw_invalid_char = false;
   size_t first_invalid_char = 0;
-  for (; left < src.size(); left++) {
-    char c = src[left];
+  for (; left < length; left++) {
+    char c = source[left];
     if (!is_ascii_whitespace(c)) break;
   }
   size_t right = left;
-  for (; right < src.size(); right++) {
-    char c = src[right];
+  for (; right < length; right++) {
+    char c = source[right];
     if (c == '/') {
-      if (left == right || right >= src.size() || saw_invalid_char) {
+      if (left == right || right >= length || saw_invalid_char) {
         flags_ |= MIME_FLAGS_INVALID_TYPE;
         return;
       }
-      type_ = src.substr(left, right - left);
+      type_.assign(const_cast<char*>(source + left), right - left);
       break;
     } else if (!saw_invalid_char && !is_http_token(c)) {
       saw_invalid_char = true;
       first_invalid_char = right;
     }
   }
-  if (type_.size() == 0) {
+  if (type_.empty()) {
     flags_ |= MIME_FLAGS_INVALID_TYPE;
     return;
   }
   saw_invalid_char = false;
   right++;
   left = right;
-  for (; right < src.size(); right++) {
-    char c = src[right];
+  for (; right < length; right++) {
+    char c = source[right];
     if (c == ';') {
       if (left == right) {
         flags_ |= MIME_FLAGS_INVALID_SUBTYPE;
@@ -126,10 +124,10 @@ MIME::MIME(const std::string& src) {
   {
     size_t trim_right = right;
     while (trim_right > left) {
-      if (is_ascii_whitespace(src[trim_right - 1])) {
+      if (is_ascii_whitespace(source[trim_right - 1])) {
         trim_right--;
       } else {
-        subtype_ = src.substr(left, trim_right - left);
+        subtype_.assign(const_cast<char*>(source + left), trim_right - left);
         break;
       }
     }
@@ -138,7 +136,7 @@ MIME::MIME(const std::string& src) {
       return;
     }
   }
-  if (subtype_.size() == 0) {
+  if (subtype_.empty()) {
     flags_ |= MIME_FLAGS_INVALID_SUBTYPE;
     return;
   }
@@ -147,16 +145,16 @@ MIME::MIME(const std::string& src) {
                  subtype_.end(),
                  subtype_.begin(),
                  ToLower);
-  while (right <= src.size()) {
+  while (right <= length) {
     right++;   // ;
-    for (; right < src.size(); right++) {
-      char c = src[right];
+    for (; right < length; right++) {
+      char c = source[right];
       if (!is_ascii_whitespace(c)) break;
     }
     left = right;
     saw_invalid_char = false;
-    for (; right < src.size(); right++) {
-      char c = src[right];
+    for (; right < length; right++) {
+      char c = source[right];
       if (c == ';'|| c == '=') {
         break;
       } else if (!is_http_token(c)) {
@@ -164,15 +162,15 @@ MIME::MIME(const std::string& src) {
       }
     }
     std::string parameter_name;
-    if (right < src.size()) {
+    if (right < length) {
       if (!saw_invalid_char) {
-        parameter_name = src.substr(left, right - left);
+        parameter_name.assign(const_cast<char*>(source + left), right - left);
         std::transform(parameter_name.begin(),
                        parameter_name.end(),
                        parameter_name.begin(),
                        ToLower);
       }
-      if (src[right] == ';') {
+      if (source[right] == ';') {
         continue;
       }
       right++;   // =
@@ -180,24 +178,24 @@ MIME::MIME(const std::string& src) {
     }
     bool saw_invalid_value = false;
     std::string parameter_value;
-    if (right < src.size()) {
-      if (src[right] == '"') {
+    if (right < length) {
+      if (source[right] == '"') {
         right++;
         while (true) {
           left = right;
-          for (; right < src.size(); right++) {
-            char c = src[right];
+          for (; right < length; right++) {
+            char c = source[right];
             if (c == '"' || c == '\\') {
               break;
             } else if (!is_http_quoted_string_token(c)) {
               saw_invalid_value = true;
             }
           }
-          parameter_value += src.substr(left, right - left);
-          if (right < src.size() && src[right] == '\\') {
+          parameter_value.append(source + left, right - left);
+          if (right < length && source[right] == '\\') {
             right++;
-            if (right < src.size()) {
-              parameter_value += src[right];
+            if (right < length) {
+              parameter_value += source[right];
               right++;
               continue;
             } else {
@@ -208,15 +206,15 @@ MIME::MIME(const std::string& src) {
             break;
           }
         }
-        for (; right < src.size(); right++) {
-          char c = src[right];
+        for (; right < length; right++) {
+          char c = source[right];
           if (c == ';') {
             break;
           }
         }
       } else {
-        for (; right < src.size(); right++) {
-          char c = src[right];
+        for (; right < length; right++) {
+          char c = source[right];
           if (c == ';') {
             break;
           } else {
@@ -231,8 +229,8 @@ MIME::MIME(const std::string& src) {
                 right += 1;
               } else {
                 right += 1;
-                if (right < src.size()) {
-                  c = src[right];
+                if (right < length) {
+                  c = source[right];
                   if ((c & 0xC0) != 0x80) {
                     is_invalid = true;
                   }
@@ -257,11 +255,11 @@ MIME::MIME(const std::string& src) {
         }
         {
           size_t trim_right = right;
-          while (is_ascii_whitespace(src[trim_right - 1])) {
+          while (is_ascii_whitespace(source[trim_right - 1])) {
             trim_right--;
           }
           if (!saw_invalid_char || first_invalid_char >= trim_right) {
-            parameter_value = src.substr(left, trim_right - left);
+            parameter_value.assign(const_cast<char*>(source + left), trim_right - left);
           }
         }
       }
@@ -297,21 +295,17 @@ void MIMEParser::Parse(const FunctionCallbackInfo<Value>& args) {
     return;
   }
 
-  Local<Object> dataSink = args[1].As<Object>();
+  Local<Object> data_sink = args[1].As<Object>();
 
-  Local<String> string = args[0].As<String>();
-  v8::String::Utf8Value source(isolate, string);
+  Utf8Value source(isolate, args[0]);
 
-  MIME mime(std::string(*source, source.length()));
+  MIME mime(const_cast<const char*>(*source), source.length());
 
   if (mime.flags_ != mime_flags::MIME_FLAGS_NONE) {
     env->ThrowError("Error parsing MIME");
     return;
   }
 
-  Local<String> type_key = FIXED_ONE_BYTE_STRING(isolate, "type");
-  Local<String> subtype_key = FIXED_ONE_BYTE_STRING(isolate, "subtype");
-  Local<String> parameters_key = FIXED_ONE_BYTE_STRING(isolate, "parameters");
   Local<String> type =
       String::NewFromUtf8(isolate,
                           mime.type_.c_str(),
@@ -322,8 +316,8 @@ void MIMEParser::Parse(const FunctionCallbackInfo<Value>& args) {
                           mime.subtype_.c_str(),
                           v8::NewStringType::kInternalized,
                           mime.subtype_.length()).ToLocalChecked();
-  dataSink->Set(context, type_key, type);
-  dataSink->Set(context, subtype_key, subtype);
+  data_sink->Set(context, env->type_string(), type).FromJust();
+  data_sink->Set(context, env->subtype_string(), subtype).FromJust();
 
   Local<Array> parameters = Array::New(isolate, mime.parameters_.size());
   size_t i = 0;
@@ -341,14 +335,14 @@ void MIMEParser::Parse(const FunctionCallbackInfo<Value>& args) {
                             v8::NewStringType::kInternalized,
                             value_str.length()).ToLocalChecked();
     Local<Array> pair_arr = Array::New(isolate, 2);
-    pair_arr->Set(context, 0, key);
-    pair_arr->Set(context, 1, value);
-    parameters->Set(context, i, pair_arr);
+    pair_arr->Set(context, 0, key).FromJust();
+    pair_arr->Set(context, 1, value).FromJust();
+    parameters->Set(context, i, pair_arr).FromJust();
     i++;
   }
-  dataSink->Set(context, parameters_key, parameters);
+  data_sink->Set(context, env->parameters_string(), parameters).FromJust();
 
-  args.GetReturnValue().Set(dataSink);
+  args.GetReturnValue().Set(data_sink);
 }
 
 void MIMEParser::Initialize(Local<Object> target,
@@ -363,7 +357,6 @@ void MIMEParser::Initialize(Local<Object> target,
 }
 
 }  // namespace mime
-
 }  // namespace node
 
 NODE_MODULE_CONTEXT_AWARE_INTERNAL(mime_wrap,
