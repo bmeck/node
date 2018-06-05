@@ -24,15 +24,15 @@ using v8::Value;
 namespace {
 
 bool is_ascii_upper_alpha(char c) {
-  return c >= '\x41' && c <= '\x5A';
+  return c >= 'A' && c <= 'Z';
 }
 
 bool is_ascii_lower_alpha(char c) {
-  return c >= '\x61' && c <= '\x7A';
+  return c >= 'a' && c <= 'z';
 }
 
 bool is_ascii_digit(char c) {
-  return c >= '\x30' && c <= '\x39';
+  return c >= '0' && c <= '9';
 }
 
 bool is_ascii_alpha(char c) {
@@ -44,35 +44,35 @@ bool is_ascii_alphanumeric(char c) {
 }
 
 bool is_http_token(char c) {
-  return c == '\x21' ||
-      c == '\x23' ||
-      c == '\x24' ||
-      c == '\x25' ||
-      c == '\x26' ||
-      c == '\x27' ||
-      c == '\x2A' ||
-      c == '\x2B' ||
-      c == '\x2D' ||
-      c == '\x2E' ||
-      c == '\x5E' ||
-      c == '\x5F' ||
-      c == '\x60' ||
-      c == '\x7C' ||
-      c == '\x7E' ||
+  return c == '!' ||
+      c == '#' ||
+      c == '$' ||
+      c == '%' ||
+      c == '&' ||
+      c == '\'' ||
+      c == '*' ||
+      c == '+' ||
+      c == '-' ||
+      c == '.' ||
+      c == '^' ||
+      c == '_' ||
+      c == '`' ||
+      c == '|' ||
+      c == '~' ||
       is_ascii_alphanumeric(c);
 }
 
 bool is_ascii_whitespace(char c) {
-  return c == '\x09' ||
-      c == '\x0A' ||
-      c == '\x0C' ||
-      c == '\x0D' ||
-      c == '\x20';
+  return c == '\t' ||
+      c == '\n' ||
+      c == '\f' ||
+      c == '\r' ||
+      c == ' ';
 }
 
 bool is_http_quoted_string_token(char c) {
-  return c == '\x09' ||
-      (c >= '\x20' && c <= '\x7E') ||
+  return c == '\t' ||
+      (c >= ' ' && c <= '\x7E') ||
       (c >= '\x80' && c <= '\xFF');
 }
 
