@@ -140,11 +140,12 @@ MIME::MIME(const char* source, size_t length) {
     flags_ |= MIME_FLAGS_INVALID_SUBTYPE;
     return;
   }
-  std::transform(type_.begin(), type_.end(), type_.begin(), ToLower);
+  std::transform(type_.begin(), type_.end(), type_.begin(),
+      static_cast<char (*)(char)>(ToLower));
   std::transform(subtype_.begin(),
                  subtype_.end(),
                  subtype_.begin(),
-                 ToLower);
+                 static_cast<char (*)(char)>(ToLower));
   while (right <= length) {
     right++;   // ;
     for (; right < length; right++) {
@@ -168,7 +169,8 @@ MIME::MIME(const char* source, size_t length) {
         std::transform(parameter_name.begin(),
                        parameter_name.end(),
                        parameter_name.begin(),
-                       ToLower);
+                       static_cast<char (*)(char)>(
+                            ToLower));
       }
       if (source[right] == ';') {
         continue;
