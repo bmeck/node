@@ -1,3 +1,6 @@
+// test with:
+// ./node --experimental-worker --experimental-modules ./threaded-loader/main.mjs
+
 import worker_threads from 'worker_threads';
 import {createRPC} from './helper.mjs';
 const { Worker, MessageChannel } = worker_threads;
