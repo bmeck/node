@@ -66,16 +66,28 @@ class LoaderChain {
     });
   }
 }
+process.on('unhandledPromiseRejection', (e) => {
+  console.error('ERRRRROOOR',e);
+})
 ;(async function () {
   const chain = await new LoaderChain([
-    new URL('./loaders/log.mjs', import.meta.url).href,
-    new URL('./loaders/blacklist.mjs?fs', import.meta.url).href
-  ], (o) => {
-    return {key: o.params.specifier};
+    new URL('./loaders/parallel-jsx/index.mjs', import.meta.url).href,
+    //new URL('./loaders/blacklist.mjs?fs', import.meta.url).href
+  ], async (out) => {
+    const body = new Blob('<x></x>', {type: 'text/javascript'});
+    return {
+      key: '/test-babel.mjs',
+      buffer: await (new Response(body).arrayBuffer()),
+      type: 'text/javascript',
+    };
   });
+  console.log('ready')
   const final = await chain.resolve({
     specifier: 'fs',
     referrer: import.meta.url,
   });
+  if (final.buffer) {
+    final.buffer = await new Response(new Blob([final.buffer])).text();
+  }
   console.log('final', final);
 })().catch(console.dir);

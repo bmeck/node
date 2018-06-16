@@ -1,5 +1,5 @@
 import worker from 'worker_threads';
-const { Blob, Error, Response } = global;
+const { Blob, Error, Response, process } = global;
 import {createRPC} from './helper.mjs';
 const {
   parentPort,
@@ -33,7 +33,10 @@ const gotParentPort = new Promise(f => {
   await import(url);
   parentPort.postMessage(selfSink, [selfSink]);
   parentPort.close();
-})();
+})().catch(e => {
+  console.error(e);
+  process.exit();
+});
 
 delete global.process;
 delete global.Buffer;
@@ -45,12 +48,25 @@ delete global.DTRACE_HTTP_CLIENT_REQUEST;
 delete global.DTRACE_HTTP_CLIENT_RESPONSE;
 const self = global.self = global;
 delete self.global;
+self.Worker = worker.Worker;
 self.parent = {
-  resolve(request) {
-    return postToParent({
+  async resolve(request) {
+    let o;
+    const {key, buffer, type} = o = await postToParent({
       method: 'onresolve',
       params: request
     });
+    console.log(buffer, 'resolved by parent')
+    if (!buffer) {
+      return {key};
+    } else {
+      return {
+        key,
+        // TODO: not reconstruct this / let blobs be sent across threads
+        // not the most costly operation, but... unnecessary
+        body: new Blob([buffer], {type})
+      }
+    }
   }
 };
 
@@ -68,13 +84,15 @@ const HANDLERS = {
         r(e);
       }
     });
+    console.trace(ret)
+    console.dir({ret})
     if (!ret.body) {
       return {key: ret.key};
     }
     if (ret.body instanceof Blob) {
       return {
         key: ret.key,
-        buffer: await new Response(ret.body).arrayBuffer(),
+        buffer: await (new Response(ret.body).arrayBuffer()),
         type: ret.body.type,
       };
     }

@@ -22,6 +22,7 @@ export const createRPC = (messenger, handle) => {
           result: await handle(inc)
         };
       } catch (e) {
+        console.error(e)
         ret = {
           id,
           error: {
