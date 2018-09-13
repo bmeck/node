@@ -95,6 +95,11 @@ static void Initialize(Local<Object> target,
     }
   }
 
+  if (!env->options()->experimental_policy.empty()) {
+    const std::string& experimental_policy = env->options()->experimental_policy;
+    READONLY_STRING_PROPERTY(target, "experimentalPolicy",  experimental_policy);
+  }
+
   if (env->options()->experimental_vm_modules)
     READONLY_BOOLEAN_PROPERTY("experimentalVMModules");
 
