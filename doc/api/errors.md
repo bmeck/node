@@ -1325,6 +1325,37 @@ An attempt was made to open an IPC communication channel with a synchronously
 forked Node.js process. See the documentation for the [`child_process`][] module
 for more information.
 
+<a id="ERR_MANIFEST_ASSERT_DEPENDENCY"></a>
+### ERR_MANIFEST_ASSERT_DEPENDENCY
+
+An attempt was made to load a dependency, but the resource loading the 
+dependency does not have authorization granted to load that specific 
+dependency. See the documentation for [policy] manifests for more information.
+
+<a id="ERR_MANIFEST_ASSERT_INTEGRITY"></a>
+### ERR_MANIFEST_ASSERT_INTEGRITY
+
+An attempt was made to load a resource, but the resource did not match the
+integrity defined by the policy manifest. See the documentation for [policy]
+manifests for more information.
+
+<a id="ERR_MANIFEST_PARSE_INTEGRITY"></a>
+### ERR_MANIFEST_PARSE_INTEGRITY
+
+An attempt was made to load a policy manifest, but the manifest had an unparsable value for a resource's `"integrity"`. See the documentation for [policy]
+manifests for more information.
+
+<a id="ERR_MANIFEST_PARSE_POLICY"></a>
+### ERR_MANIFEST_PARSE_POLICY
+
+An attempt was made to load a policy manifest, but the manifest had a resource with a `"policy"` that was not declared in the manifest. See the documentation for [policy]
+manifests for more information.
+
+<a id="ERR_MANIFEST_TDZ"></a>
+### ERR_MANIFEST_TDZ
+
+An attempt was made to read from a policy manifest, but the manifest initialization has not yet taken place. This is likely a bug in Node.js.
+
 <a id="ERR_MEMORY_ALLOCATION_FAILED"></a>
 ### ERR_MEMORY_ALLOCATION_FAILED
 
@@ -1534,6 +1565,11 @@ An attempt was made to operate on an already closed socket.
 ### ERR_SOCKET_DGRAM_NOT_RUNNING
 
 A call was made and the UDP subsystem was not running.
+
+<a id="ERR_SRI_PARSE"></a>
+### ERR_SRI_PARSE
+
+A string was provided for a SubResource Integrity check, but was unable to be parsed. Check the format of integrity attributes by looking at the [SubResource Integrity specification](https://www.w3.org/TR/SRI/#the-integrity-attribute).
 
 <a id="ERR_STDERR_CLOSE"></a>
 ### ERR_STDERR_CLOSE
@@ -2101,8 +2137,10 @@ size.
 [file descriptors]: https://en.wikipedia.org/wiki/File_descriptor
 [ICU]: intl.html#intl_internationalization_support
 [online]: http://man7.org/linux/man-pages/man3/errno.3.html
+[policy]: policy.html
 [stream-based]: stream.html
 [syscall]: http://man7.org/linux/man-pages/man2/syscalls.2.html
+[SubResource Integrity specification]: https://www.w3.org/TR/SRI/#the-integrity-attribute
 [try-catch]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/try...catch
 [vm]: vm.html
 [WHATWG Supported Encodings]: util.html#util_whatwg_supported_encodings
