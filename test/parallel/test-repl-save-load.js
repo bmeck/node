@@ -60,14 +60,14 @@ assert.strictEqual(fs.readFileSync(saveFileName, 'utf8'),
     'return "saved";',
     '}'
   ];
-  const putIn = new ArrayStream();
-  const replServer = repl.start('', putIn);
+  const editorPutIn = new ArrayStream();
+  const replServer = repl.start('', editorPutIn);
 
-  putIn.run(['.editor']);
-  putIn.run(cmds);
+  editorPutIn.run(['.editor']);
+  editorPutIn.run(cmds);
   replServer.write('', { ctrl: true, name: 'd' });
 
-  putIn.run([`.save ${saveFileName}`]);
+  editorPutIn.run([`.save ${saveFileName}`]);
   replServer.close();
   assert.strictEqual(fs.readFileSync(saveFileName, 'utf8'),
                      `${cmds.join('\n')}\n`);
@@ -76,7 +76,9 @@ assert.strictEqual(fs.readFileSync(saveFileName, 'utf8'),
 // make sure that the REPL data is "correct"
 // so when I load it back I know I'm good
 testMe.complete('inner.o', function(error, data) {
+  console.log('WTH0')
   assert.deepStrictEqual(data, works);
+  console.log('WTH')
 });
 
 // clear the REPL
@@ -84,10 +86,13 @@ putIn.run(['.clear']);
 
 // Load the file back in
 putIn.run([`.load ${saveFileName}`]);
+console.log('lalala')
 
 // make sure that the REPL data is "correct"
 testMe.complete('inner.o', function(error, data) {
+  console.log('WTH1')
   assert.deepStrictEqual(data, works);
+  console.log('WTH2')
 });
 
 // clear the REPL
