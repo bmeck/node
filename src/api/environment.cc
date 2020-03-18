@@ -669,6 +669,46 @@ bool InitializePrimordials(Local<Context> context) {
     }
   }
 
+  Local<Object> primordialFunctions = Object::New(isolate);
+  if (!primordialFunctions->SetPrototype(context, Null(isolate)).FromJust() ||
+      !exports->Set(context,
+        FIXED_ONE_BYTE_STRING(isolate, "primordialModules"),
+        primordialFunctions).FromJust()) {
+    return false;
+  }
+
+  static const char* primordial_module_files[] = {
+                                        "internal/util/types",
+                                        //"internal/errors",
+                                        nullptr};
+
+  for (const char** module = primordial_module_files;
+       *module != nullptr;
+       module++) {
+    std::vector<Local<String>> parameters = {
+        global_string, primordials_string};
+    Local<Value> arguments[] = {context->Global(), primordials};
+    MaybeLocal<Function> maybe_fn =
+        native_module::NativeModuleEnv::LookupAndCompile(
+            context, *module, &parameters, nullptr);
+    if (maybe_fn.IsEmpty()) {
+      return false;
+    }
+    Local<Function> fn = maybe_fn.ToLocalChecked();
+    MaybeLocal<Value> result =
+        fn->Call(context, Undefined(isolate), arraysize(arguments), arguments);
+    // Execution failed during context creation.
+    // TODO(joyeecheung): deprecate this signature and return a MaybeLocal.
+    if (result.IsEmpty() || result.ToLocalChecked()->IsFunction() != true) {
+      return false;
+    }
+    fn = result.ToLocalChecked().As<Function>();
+    MaybeLocal<String> key = String::NewFromOneByte(
+      isolate,
+      reinterpret_cast<const uint8_t*>(*module));
+    primordialFunctions->Set(context, key.ToLocalChecked(), fn);
+  }
+
   return true;
 }
 
