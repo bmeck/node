@@ -534,6 +534,7 @@ MaybeLocal<Object> GetPerContextExports(Local<Context> context) {
   if (existing_value->IsObject())
     return handle_scope.Escape(existing_value.As<Object>());
 
+  printf("Initializing new primordials---\n");
   Local<Object> exports = Object::New(isolate);
   if (context->Global()->SetPrivate(context, key, exports).IsNothing() ||
       !InitializePrimordials(context))
@@ -678,16 +679,15 @@ bool InitializePrimordials(Local<Context> context) {
   }
 
   static const char* primordial_module_files[] = {
-                                        "internal/util/types",
-                                        //"internal/errors",
+                                        //"internal/util/types",
+                                        "internal/noop",
                                         nullptr};
 
   for (const char** module = primordial_module_files;
        *module != nullptr;
        module++) {
     std::vector<Local<String>> parameters = {
-        global_string, primordials_string};
-    Local<Value> arguments[] = {context->Global(), primordials};
+        global_string, primordials_string, FIXED_ONE_BYTE_STRING(isolate, "fn")};
     MaybeLocal<Function> maybe_fn =
         native_module::NativeModuleEnv::LookupAndCompile(
             context, *module, &parameters, nullptr);
@@ -695,18 +695,22 @@ bool InitializePrimordials(Local<Context> context) {
       return false;
     }
     Local<Function> fn = maybe_fn.ToLocalChecked();
+    Local<Value> arguments[] = {context->Global(), primordials, fn};
     MaybeLocal<Value> result =
         fn->Call(context, Undefined(isolate), arraysize(arguments), arguments);
     // Execution failed during context creation.
     // TODO(joyeecheung): deprecate this signature and return a MaybeLocal.
     if (result.IsEmpty() || result.ToLocalChecked()->IsFunction() != true) {
+      printf("RESULT EMPTY? %s\n\n", result.IsEmpty() ? "y": "n");
       return false;
     }
-    fn = result.ToLocalChecked().As<Function>();
+    Local<Function> resultFn = result.ToLocalChecked().As<Function>();
+    node::Utf8Value src(isolate, resultFn->ToString(context).ToLocalChecked());
+    printf("GOT RESULT %s\n\n", *src);
     MaybeLocal<String> key = String::NewFromOneByte(
       isolate,
       reinterpret_cast<const uint8_t*>(*module));
-    primordialFunctions->Set(context, key.ToLocalChecked(), fn);
+      primordialFunctions->Set(context, key.ToLocalChecked(), resultFn);
   }
 
   return true;
