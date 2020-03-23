@@ -531,8 +531,10 @@ MaybeLocal<Object> GetPerContextExports(Local<Context> context) {
   Local<Value> existing_value;
   if (!global->GetPrivate(context, key).ToLocal(&existing_value))
     return MaybeLocal<Object>();
-  if (existing_value->IsObject())
+  if (existing_value->IsObject()) {
+    printf("returning existing primordials---\n");
     return handle_scope.Escape(existing_value.As<Object>());
+  }
 
   printf("Initializing new primordials---\n");
   Local<Object> exports = Object::New(isolate);
@@ -696,6 +698,9 @@ bool InitializePrimordials(Local<Context> context) {
     }
     Local<Function> fn = maybe_fn.ToLocalChecked();
     Local<Value> arguments[] = {context->Global(), primordials, fn};
+    node::Utf8Value fnsrc(isolate, fn->ToString(context).ToLocalChecked());
+    node::Utf8Value globalsrc(isolate, context->Global()->ToString(context).ToLocalChecked());
+    printf("torun %s global %s\n\n", *fnsrc, *globalsrc);
     MaybeLocal<Value> result =
         fn->Call(context, Undefined(isolate), arraysize(arguments), arguments);
     // Execution failed during context creation.

@@ -1,4 +1,4 @@
-/* global port */
+/* global port , outside , inside */
 'use strict';
 const common = require('../common');
 const assert = require('assert');

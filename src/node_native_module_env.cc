@@ -130,7 +130,6 @@ void NativeModuleEnv::CompileFunction(const FunctionCallbackInfo<Value>& args) {
   Local<Context> context = env->context();
   node::Utf8Value id_v(isolate, args[0].As<String>());
   const char* id = *id_v;
-  printf("LOADING NativeModule %s\n", id);
   NativeModuleLoader::Result result;
   MaybeLocal<Function> maybe;
   MaybeLocal<Object> contextExports = GetPerContextExports(context);
@@ -144,9 +143,15 @@ void NativeModuleEnv::CompileFunction(const FunctionCallbackInfo<Value>& args) {
                                     .As<Object>()->Get(
                                       context,
                                       args[0].As<String>());
-      if (maybeFn.IsEmpty() == false) {
+      if (maybeFn.IsEmpty() != true) {
         Local<Value> fn = maybeFn.ToLocalChecked();
         if (fn->IsFunction()) {
+          if (maybeFn.IsEmpty() != true) {
+            MaybeLocal<String> str = args[0].As<String>();
+            printf("%s\n", str.IsEmpty() ? "no string?" : "has string");
+            node::Utf8Value pmsrc(isolate, str.ToLocalChecked());
+            printf("GOT PER CONTEXT primordialModules %s\n", *pmsrc);
+          }
           result = NativeModuleLoader::Result::kWithCache;
           maybe = fn.As<Function>();
         }
