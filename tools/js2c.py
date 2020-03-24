@@ -81,7 +81,7 @@ static const uint16_t {0}[] = {{
 }};
 """
 
-INITIALIZER = '{0}.emplace("{1}", UnionBytes{{{2}, {3}}});'
+INITIALIZER = 'source_.emplace("{1}", NodeBuiltinModuleTemplate{{{0}, UnionBytes{{{2}, {3}}}}});'
 
 CONFIG_GYPI_ID = 'config_raw'
 
@@ -119,11 +119,7 @@ def AddModule(filename, definitions, initializers):
   slug = SLUGGER_RE.sub('_', name)
   var = slug + '_raw'
   definition, size = GetDefinition(var, code)
-  if is_primordial is True:
-    print("PRIMORDIAL {0}\n".format(filename))
-    initializer = INITIALIZER.format('primordial_source_', name, var, size)
-  else:
-    initializer = INITIALIZER.format('source_', name, var, size)
+  initializer = INITIALIZER.format('true' if is_primordial else 'false', name, var, size)
   definitions.append(definition)
   initializers.append(initializer)
 

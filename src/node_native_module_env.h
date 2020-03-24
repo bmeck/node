@@ -28,7 +28,9 @@ class NativeModuleEnv {
   static v8::Local<v8::Object> GetSourceObject(v8::Local<v8::Context> context);
   // Returns config.gypi as a JSON string
   static v8::Local<v8::String> GetConfigString(v8::Isolate* isolate);
+  static std::vector<std::string> GetModuleIds();
   static bool Exists(const char* id);
+  static bool IsPrimordial(const char* id);
   static bool Add(const char* id, const UnionBytes& source);
 
   // Loads data into NativeModuleLoader::.instance.code_cache_

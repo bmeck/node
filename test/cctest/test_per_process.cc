@@ -22,12 +22,12 @@ TEST_F(PerProcessTest, EmbeddedSources) {
   const auto& sources = PerProcessTest::get_sources_for_test();
   ASSERT_TRUE(
     std::any_of(sources.cbegin(), sources.cend(),
-                [](auto p){ return p.second.is_one_byte(); }))
+                [](auto p){ return p.second.source.is_one_byte(); }))
       << "NativeModuleLoader::source_ should have some 8bit items";
 
   ASSERT_TRUE(
     std::any_of(sources.cbegin(), sources.cend(),
-                [](auto p){ return !p.second.is_one_byte(); }))
+                [](auto p){ return !p.second.source.is_one_byte(); }))
       << "NativeModuleLoader::source_ should have some 16bit items";
 }
 

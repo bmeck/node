@@ -17,7 +17,11 @@ class PerProcessTest;
 namespace node {
 namespace native_module {
 
-using NativeModuleRecordMap = std::map<std::string, UnionBytes>;
+struct NodeBuiltinModuleTemplate {
+  const bool isPrimordial = false;
+  const UnionBytes source;
+};
+using NativeModuleRecordMap = std::map<std::string, NodeBuiltinModuleTemplate>;
 using NativeModuleCacheMap =
     std::unordered_map<std::string,
                        std::unique_ptr<v8::ScriptCompiler::CachedData>>;
@@ -33,6 +37,7 @@ class NativeModuleLoader {
  public:
   NativeModuleLoader(const NativeModuleLoader&) = delete;
   NativeModuleLoader& operator=(const NativeModuleLoader&) = delete;
+  enum class Result { kWithCache, kWithoutCache };
 
  private:
   // Only allow access from friends.
@@ -47,6 +52,7 @@ class NativeModuleLoader {
   UnionBytes GetConfig();       // Return data for config.gypi
 
   bool Exists(const char* id);
+  bool IsPrimordial(const char* id);
   bool Add(const char* id, const UnionBytes& source);
 
   v8::Local<v8::Object> GetSourceObject(v8::Local<v8::Context> context);
@@ -67,7 +73,6 @@ class NativeModuleLoader {
 
   NativeModuleCacheMap* code_cache();
   v8::ScriptCompiler::CachedData* GetCodeCache(const char* id) const;
-  enum class Result { kWithCache, kWithoutCache };
   v8::MaybeLocal<v8::String> LoadBuiltinModuleSource(v8::Isolate* isolate,
                                                      const char* id);
   // If an exception is encountered (e.g. source code contains

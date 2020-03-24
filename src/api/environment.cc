@@ -531,8 +531,9 @@ MaybeLocal<Object> GetPerContextExports(Local<Context> context) {
   Local<Value> existing_value;
   if (!global->GetPrivate(context, key).ToLocal(&existing_value))
     return MaybeLocal<Object>();
-  if (existing_value->IsObject())
+  if (existing_value->IsObject()) {
     return handle_scope.Escape(existing_value.As<Object>());
+  }
 
   Local<Object> exports = Object::New(isolate);
   if (context->Global()->SetPrivate(context, key, exports).IsNothing() ||
@@ -669,6 +670,35 @@ bool InitializePrimordials(Local<Context> context) {
     }
   }
 
+  Local<Object> primordialModules = Object::New(isolate);
+  exports->Set(context,
+      FIXED_ONE_BYTE_STRING(isolate, "primordialModules"),
+      primordialModules);
+  for (auto const& id : native_module::NativeModuleEnv::GetModuleIds()) {
+    if (native_module::NativeModuleEnv::IsPrimordial(id.c_str())) {
+      std::vector<Local<String>> parameters = {
+          global_string, primordials_string};
+      Local<Value> arguments[] = {context->Global(), primordials};
+      MaybeLocal<Function> maybe_fn =
+          native_module::NativeModuleEnv::LookupAndCompile(
+              context, id.c_str(), &parameters, nullptr);
+      if (maybe_fn.IsEmpty()) {
+        return false;
+      }
+      Local<Function> fn = maybe_fn.ToLocalChecked();
+      Local<Value> result;
+      // Execution failed during context creation.
+      // TODO(joyeecheung): deprecate this signature and return a MaybeLocal.
+      if (!fn->Call(
+          context,
+          Undefined(isolate),
+          arraysize(arguments),
+          arguments).ToLocal(&result)) {
+        return false;
+      }
+      primordialModules->Set(context, OneByteString(isolate, id.c_str()), result);
+    }
+  }
   return true;
 }
 

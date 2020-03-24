@@ -1,3 +1,4 @@
+#include "node_internals.h"
 #include "node_native_module_env.h"
 #include "env-inl.h"
 
@@ -39,6 +40,10 @@ bool NativeModuleEnv::Add(const char* id, const UnionBytes& source) {
 
 bool NativeModuleEnv::Exists(const char* id) {
   return NativeModuleLoader::GetInstance()->Exists(id);
+}
+
+bool NativeModuleEnv::IsPrimordial(const char* id) {
+  return NativeModuleLoader::GetInstance()->IsPrimordial(id);
 }
 
 Local<Object> NativeModuleEnv::GetSourceObject(Local<Context> context) {
@@ -98,6 +103,10 @@ void NativeModuleEnv::GetCacheUsage(const FunctionCallbackInfo<Value>& args) {
   args.GetReturnValue().Set(result);
 }
 
+std::vector<std::string> NativeModuleEnv::GetModuleIds() {
+  return NativeModuleLoader::GetInstance()->GetModuleIds();
+}
+
 void NativeModuleEnv::ModuleIdsGetter(Local<Name> property,
                                       const PropertyCallbackInfo<Value>& info) {
   Isolate* isolate = info.GetIsolate();
@@ -127,10 +136,48 @@ void NativeModuleEnv::CompileFunction(const FunctionCallbackInfo<Value>& args) {
   CHECK(args[0]->IsString());
   node::Utf8Value id_v(env->isolate(), args[0].As<String>());
   const char* id = *id_v;
+  Isolate* isolate = env->isolate();
+  Local<Context> context = env->context();
   NativeModuleLoader::Result result;
+#ifndef NODE_BUILTIN_MODULES_PATH
+  if (NativeModuleLoader::GetInstance()->IsPrimordial(id)) {
+    Local<Object> perContext;
+    Local<Value> primordialModules;
+    Local<Value> primordialModuleFn;
+    if (GetPerContextExports(context).ToLocal(&perContext) &&
+        perContext->Get(
+            context,
+            FIXED_ONE_BYTE_STRING(isolate, "primordialModules")
+        ).ToLocal(&primordialModules) &&
+        primordialModules->IsObject() &&
+        primordialModules.As<Object>()->Get(
+            context,
+            OneByteString(isolate, id)
+        ).ToLocal(&primordialModuleFn)) {
+      printf("FOUND PRIM FN %s\n", id);
+      args.GetReturnValue().Set(primordialModuleFn);
+      return;
+    } else {
+      Local<Function> init;
+      Local<Value> ret;
+      if (NativeModuleLoader::GetInstance()->CompileAsModule(
+              context, id, &result).ToLocal(&init)) {
+        Local<Value> parameters[] = { env->primordials() };
+        if (init->Call(
+            context,
+            Undefined(isolate),
+            arraysize(parameters),
+            parameters).ToLocal(&ret) && ret->IsFunction()) {
+          args.GetReturnValue().Set(ret);
+        }
+      }
+      return;
+    }
+  }
+#endif
   MaybeLocal<Function> maybe =
       NativeModuleLoader::GetInstance()->CompileAsModule(
-          env->context(), id, &result);
+          context, id, &result);
   RecordResult(id, result, env);
   if (!maybe.IsEmpty()) {
     args.GetReturnValue().Set(maybe.ToLocalChecked());

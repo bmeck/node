@@ -1,3 +1,4 @@
+#include "env-inl.h"
 #include "node_native_module.h"
 #include "util-inl.h"
 
@@ -18,6 +19,7 @@ using v8::Script;
 using v8::ScriptCompiler;
 using v8::ScriptOrigin;
 using v8::String;
+using v8::Value;
 
 NativeModuleLoader NativeModuleLoader::instance_;
 
@@ -33,11 +35,16 @@ bool NativeModuleLoader::Exists(const char* id) {
   return source_.find(id) != source_.end();
 }
 
+bool NativeModuleLoader::IsPrimordial(const char* id) {
+  auto entry = source_.find(id);
+  return entry != source_.end() && entry->second.isPrimordial;
+}
+
 bool NativeModuleLoader::Add(const char* id, const UnionBytes& source) {
   if (Exists(id)) {
     return false;
   }
-  source_.emplace(id, source);
+  source_.emplace(id, NodeBuiltinModuleTemplate{false, source});
   return true;
 }
 
@@ -46,7 +53,7 @@ Local<Object> NativeModuleLoader::GetSourceObject(Local<Context> context) {
   Local<Object> out = Object::New(isolate);
   for (auto const& x : source_) {
     Local<String> key = OneByteString(isolate, x.first.c_str(), x.first.size());
-    out->Set(context, key, x.second.ToStringChecked(isolate)).FromJust();
+    out->Set(context, key, x.second.source.ToStringChecked(isolate)).FromJust();
   }
   return out;
 }
@@ -179,7 +186,20 @@ MaybeLocal<Function> NativeModuleLoader::CompileAsModule(
       FIXED_ONE_BYTE_STRING(isolate, "process"),
       FIXED_ONE_BYTE_STRING(isolate, "internalBinding"),
       FIXED_ONE_BYTE_STRING(isolate, "primordials")};
-  return LookupAndCompile(context, id, &parameters, result);
+  if (!IsPrimordial(id)) {
+    return LookupAndCompile(context, id, &parameters, result);
+  }
+  std::vector<Local<String>> primordialParameters = {
+      FIXED_ONE_BYTE_STRING(isolate, "primordials")};
+  Local<Function> init;
+  if (LookupAndCompile(
+        context,
+        id,
+        &primordialParameters,
+        result).ToLocal(&init)) {
+    return init;
+  }
+  return MaybeLocal<Function>();
 }
 
 #ifdef NODE_BUILTIN_MODULES_PATH
@@ -236,7 +256,7 @@ MaybeLocal<String> NativeModuleLoader::LoadBuiltinModuleSource(Isolate* isolate,
 #else
   const auto source_it = source_.find(id);
   CHECK_NE(source_it, source_.end());
-  return source_it->second.ToStringChecked(isolate);
+  return source_it->second.source.ToStringChecked(isolate);
 #endif  // NODE_BUILTIN_MODULES_PATH
 }
 
