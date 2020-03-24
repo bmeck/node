@@ -154,7 +154,6 @@ void NativeModuleEnv::CompileFunction(const FunctionCallbackInfo<Value>& args) {
             context,
             OneByteString(isolate, id)
         ).ToLocal(&primordialModuleFn)) {
-      printf("FOUND PRIM FN %s\n", id);
       args.GetReturnValue().Set(primordialModuleFn);
       return;
     } else {

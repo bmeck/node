@@ -27,7 +27,6 @@
     'node_intermediate_lib_type%': 'static_library',
     'node_builtin_modules_path%': '',
     'library_files': [
-      'lib/internal/noop.js',
       'lib/internal/bootstrap/environment.js',
       'lib/internal/bootstrap/loaders.js',
       'lib/internal/bootstrap/node.js',
