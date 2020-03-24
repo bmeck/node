@@ -1,4 +1,3 @@
-#include "node_internals.h"
 #include "node_native_module_env.h"
 #include "env-inl.h"
 
@@ -126,43 +125,12 @@ void NativeModuleEnv::RecordResult(const char* id,
 void NativeModuleEnv::CompileFunction(const FunctionCallbackInfo<Value>& args) {
   Environment* env = Environment::GetCurrent(args);
   CHECK(args[0]->IsString());
-  Isolate* isolate = env->isolate();
-  Local<Context> context = env->context();
-  node::Utf8Value id_v(isolate, args[0].As<String>());
+  node::Utf8Value id_v(env->isolate(), args[0].As<String>());
   const char* id = *id_v;
   NativeModuleLoader::Result result;
-  MaybeLocal<Function> maybe;
-  MaybeLocal<Object> contextExports = GetPerContextExports(context);
-  if (contextExports.IsEmpty() != true) {
-    MaybeLocal<Value> primordialModules = contextExports.ToLocalChecked()->Get(
-      context,
-      FIXED_ONE_BYTE_STRING(isolate, "primordialModules"));
-    if (primordialModules.IsEmpty() != true &&
-      primordialModules.ToLocalChecked()->IsObject()) {
-      MaybeLocal<Value> maybeFn = primordialModules.ToLocalChecked()
-                                    .As<Object>()->Get(
-                                      context,
-                                      args[0].As<String>());
-      if (maybeFn.IsEmpty() != true) {
-        Local<Value> fn = maybeFn.ToLocalChecked();
-        if (fn->IsFunction()) {
-          if (maybeFn.IsEmpty() != true) {
-            MaybeLocal<String> str = args[0].As<String>();
-            printf("%s\n", str.IsEmpty() ? "no string?" : "has string");
-            node::Utf8Value pmsrc(isolate, str.ToLocalChecked());
-            printf("GOT PER CONTEXT primordialModules %s\n", *pmsrc);
-          }
-          result = NativeModuleLoader::Result::kWithCache;
-          maybe = fn.As<Function>();
-        }
-      }
-    }
-  }
-  if (maybe.IsEmpty()) {
-    maybe =
+  MaybeLocal<Function> maybe =
       NativeModuleLoader::GetInstance()->CompileAsModule(
-        env->context(), id, &result);
-  }
+          env->context(), id, &result);
   RecordResult(id, result, env);
   if (!maybe.IsEmpty()) {
     args.GetReturnValue().Set(maybe.ToLocalChecked());

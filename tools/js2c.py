@@ -81,7 +81,7 @@ static const uint16_t {0}[] = {{
 }};
 """
 
-INITIALIZER = 'source_.emplace("{0}", UnionBytes{{{1}, {2}}});'
+INITIALIZER = '{0}.emplace("{1}", UnionBytes{{{2}, {3}}});'
 
 CONFIG_GYPI_ID = 'config_raw'
 
@@ -114,11 +114,16 @@ def GetDefinition(var, source, step=30):
 
 def AddModule(filename, definitions, initializers):
   code = ReadFile(filename)
+  is_primordial = code.find('\'use primordial\';') == 0
   name = NormalizeFileName(filename)
   slug = SLUGGER_RE.sub('_', name)
   var = slug + '_raw'
   definition, size = GetDefinition(var, code)
-  initializer = INITIALIZER.format(name, var, size)
+  if is_primordial is True:
+    print("PRIMORDIAL {0}\n".format(filename))
+    initializer = INITIALIZER.format('primordial_source_', name, var, size)
+  else:
+    initializer = INITIALIZER.format('source_', name, var, size)
   definitions.append(definition)
   initializers.append(initializer)
 
