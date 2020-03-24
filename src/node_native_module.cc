@@ -19,7 +19,6 @@ using v8::Script;
 using v8::ScriptCompiler;
 using v8::ScriptOrigin;
 using v8::String;
-using v8::Value;
 
 NativeModuleLoader NativeModuleLoader::instance_;
 

@@ -696,7 +696,9 @@ bool InitializePrimordials(Local<Context> context) {
           arguments).ToLocal(&result)) {
         return false;
       }
-      primordialModules->Set(context, OneByteString(isolate, id.c_str()), result);
+      primordialModules->Set(context,
+          OneByteString(isolate, id.c_str()),
+          result);
     }
   }
   return true;

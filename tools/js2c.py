@@ -114,7 +114,23 @@ def GetDefinition(var, source, step=30):
 
 def AddModule(filename, definitions, initializers):
   code = ReadFile(filename)
-  is_primordial = code.find('\'use primordial\';') == 0
+  is_primordial = re.search(r"""
+    ^
+    (
+      [#][!].*?( \r?\n | $ )
+    ) ?
+    (
+      \s*["][^"]*["]( \s*; | \r?\n | $) |
+      \s*['][^']*[']( \s*; | \r?\n | $) |
+      \s*[/][/].*?( \r?\n | $) |
+      \s*[/][*]( (?![*][/]). )[*][/] |
+      \s*\r?\n
+    )*?
+    (
+      \s*["]use\ primordial["]( \s*; | \r?\n | $) |
+      \s*[']use\ primordial[']( \s*; | \r?\n | $)
+    )
+  """, code, re.X) is not None
   name = NormalizeFileName(filename)
   slug = SLUGGER_RE.sub('_', name)
   var = slug + '_raw'

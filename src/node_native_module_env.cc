@@ -147,13 +147,12 @@ void NativeModuleEnv::CompileFunction(const FunctionCallbackInfo<Value>& args) {
     if (GetPerContextExports(context).ToLocal(&perContext) &&
         perContext->Get(
             context,
-            FIXED_ONE_BYTE_STRING(isolate, "primordialModules")
-        ).ToLocal(&primordialModules) &&
+            FIXED_ONE_BYTE_STRING(isolate, "primordialModules"))
+            .ToLocal(&primordialModules) &&
         primordialModules->IsObject() &&
         primordialModules.As<Object>()->Get(
             context,
-            OneByteString(isolate, id)
-        ).ToLocal(&primordialModuleFn)) {
+            OneByteString(isolate, id)).ToLocal(&primordialModuleFn)) {
       args.GetReturnValue().Set(primordialModuleFn);
       return;
     } else {
