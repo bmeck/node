@@ -16,12 +16,13 @@ const dep = fixtures.path('policy', 'parent.js');
     'policy',
     'dependencies',
     'dependencies-redirect-policy.json');
-  const { status } = spawnSync(
+  const { status, stderr, stdout } = spawnSync(
     process.execPath,
     [
       '--experimental-policy', depPolicy, dep,
     ]
   );
+  console.log('%s\n%s', stderr, stdout);
   assert.strictEqual(status, 0);
 }
 {
@@ -55,12 +56,13 @@ const dep = fixtures.path('policy', 'parent.js');
     'policy',
     'dependencies',
     'dependencies-wildcard-policy.json');
-  const { status } = spawnSync(
+  const { status, stderr, stdout } = spawnSync(
     process.execPath,
     [
       '--experimental-policy', depPolicy, dep,
     ]
   );
+  console.log('%s\n%s', stderr, stdout);
   assert.strictEqual(status, 0);
 }
 {
@@ -94,7 +96,7 @@ const dep = fixtures.path('policy', 'parent.js');
     'policy',
     'dependencies',
     'dependencies-scopes-relative-specifier.json');
-  const { status } = spawnSync(
+  const { status, stderr, stdout } = spawnSync(
     process.execPath,
     [
       '--experimental-policy',
@@ -102,6 +104,7 @@ const dep = fixtures.path('policy', 'parent.js');
       fixtures.path('policy', 'canonicalize.mjs')
     ]
   );
+  console.log('%s\n%s', stderr, stdout)
   assert.strictEqual(
     status,
     0,
