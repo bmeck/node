@@ -22,54 +22,54 @@ const assert = require('assert');
     'file:///root/dir1/dir2/'
   ];
 
-  {
-    const manifest = new Manifest({
-      scopes: {
-        'file:///': {
-          integrity: true
-        }
-      }
-    });
+  // {
+  //   const manifest = new Manifest({
+  //     scopes: {
+  //       'file:///': {
+  //         integrity: true
+  //       }
+  //     }
+  //   });
 
-    for (const href of baseURLs) {
-      assert.strictEqual(
-        manifest.assertIntegrity(href),
-        true
-      );
-      assert.strictEqual(
-        manifest.assertIntegrity(href, null),
-        true
-      );
-      assert.strictEqual(
-        manifest.assertIntegrity(href, ''),
-        true
-      );
-    }
-  }
-  {
-    const manifest = new Manifest({
-      scopes: {
-        'file:': {
-          integrity: true
-        }
-      }
-    });
+  //   for (const href of baseURLs) {
+  //     assert.strictEqual(
+  //       manifest.assertIntegrity(href),
+  //       true
+  //     );
+  //     assert.strictEqual(
+  //       manifest.assertIntegrity(href, null),
+  //       true
+  //     );
+  //     assert.strictEqual(
+  //       manifest.assertIntegrity(href, ''),
+  //       true
+  //     );
+  //   }
+  // }
+  // {
+  //   const manifest = new Manifest({
+  //     scopes: {
+  //       'file:': {
+  //         integrity: true
+  //       }
+  //     }
+  //   });
 
-    for (const href of baseURLs) {
-      assert.strictEqual(
-        manifest.assertIntegrity(href),
-        true
-      );
-      assert.strictEqual(
-        manifest.assertIntegrity(href, null),
-        true
-      );
-      assert.strictEqual(
-        manifest.assertIntegrity(href, ''),
-        true
-      );
-    }
-  }
+  //   for (const href of baseURLs) {
+  //     assert.strictEqual(
+  //       manifest.assertIntegrity(href),
+  //       true
+  //     );
+  //     assert.strictEqual(
+  //       manifest.assertIntegrity(href, null),
+  //       true
+  //     );
+  //     assert.strictEqual(
+  //       manifest.assertIntegrity(href, ''),
+  //       true
+  //     );
+  //   }
+  // }
   {
     const manifest = new Manifest({
       resources: {

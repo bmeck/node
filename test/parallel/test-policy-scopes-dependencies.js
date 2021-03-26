@@ -22,45 +22,82 @@ const assert = require('assert');
     'file:///root/dir1/dir2/'
   ];
 
-  // {
-  //   const manifest = new Manifest({
-  //     scopes: {
-  //       'file:///': {
-  //         dependencies: true
-  //       }
-  //     }
-  //   });
+  {
+    const manifest = new Manifest({
+      scopes: {
+        'file:///': {
+          dependencies: true
+        }
+      }
+    });
 
-  //   for (const href of baseURLs) {
-  //     assert.strictEqual(
-  //       manifest.getDependencyMapper(href).resolve('fs'),
-  //       true
-  //     );
-  //   }
-  // }
-  // {
-  //   const manifest = new Manifest({
-  //     scopes: {
-  //       'file:': {
-  //         dependencies: true
-  //       }
-  //     }
-  //   });
+    for (const href of baseURLs) {
+      console.log({href},'???a')
+      assert.strictEqual(
+        manifest.getDependencyMapper(href).resolve('fs'),
+        true
+      );
+    }
+  }
+  {
+    const manifest = new Manifest({
+      scopes: {
+        '': {
+          dependencies: true
+        }
+      }
+    });
 
-  //   for (const href of baseURLs) {
-  //     assert.strictEqual(
-  //       manifest
-  //         .getDependencyMapper(href)
-  //         .resolve('fs'),
-  //       true);
-  //   }
+    for (const href of baseURLs) {
+      assert.strictEqual(
+        manifest.getDependencyMapper(href).resolve('fs'),
+        true
+      );
+    }
+  }
+  {
+    const manifest = new Manifest({
+      scopes: {
+        '': {
+          dependencies: true
+        },
+        'file:': {
+          cascade: true
+        }
+      }
+    });
 
-  //   assert.strictEqual(
-  //     manifest
-  //       .getDependencyMapper('file://host/')
-  //       .resolve('fs'),
-  //     true);
-  // }
+    for (const href of baseURLs) {
+      console.error({href})
+      assert.strictEqual(
+        manifest.getDependencyMapper(href).resolve('fs'),
+        true
+      );
+    }
+  }
+  {
+    const manifest = new Manifest({
+      scopes: {
+        'file:': {
+          dependencies: true
+        }
+      }
+    });
+
+    for (const href of baseURLs) {
+      assert.strictEqual(
+        manifest
+          .getDependencyMapper(href)
+          .resolve('fs'),
+        true);
+    }
+
+    assert.strictEqual(
+      manifest
+        .getDependencyMapper('file://host/')
+        .resolve('fs'),
+      true);
+  }
   {
     const manifest = new Manifest({
       resources: {

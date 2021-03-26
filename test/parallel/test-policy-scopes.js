@@ -16,12 +16,13 @@ const { spawnSync } = require('child_process');
     'policy',
     'dependencies',
     'dependencies-scopes-policy.json');
-  const { status } = spawnSync(
+  const { status, stdout, stderr } = spawnSync(
     process.execPath,
     [
       '--experimental-policy', depPolicy, dep,
     ]
   );
+  console.log('%s\n%s', stdout, stderr)
   assert.strictEqual(status, 0);
 }
 {
