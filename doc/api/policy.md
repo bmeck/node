@@ -80,9 +80,9 @@ compatible with the browser
 [integrity attribute](https://www.w3.org/TR/SRI/#the-integrity-attribute)
 associated with absolute URLs.
 
-When using `require()` all resources involved in loading are checked for
-integrity if a policy manifest has been specified. If a resource does not match
-the integrity listed in the manifest, an error will be thrown.
+When using `require()` or `import` all resources involved in loading are checked
+for integrity if a policy manifest has been specified. If a resource does not
+match the integrity listed in the manifest, an error will be thrown.
 
 An example policy file that would allow loading a file `checked.js`:
 
@@ -107,7 +107,7 @@ and hash fragment. `./a.js?b` will not be used when attempting to load
 `./a.js` and vice versa.
 
 To generate integrity strings, a script such as
-`printf "sha384-$(cat checked.js | openssl dgst -sha384 -binary | base64)"`
+`node -e 'process.stdout.write("sha256-");process.stdin.pipe(crypto.createHash("sha256").setEncoding("base64")).pipe(process.stdout)' < FILE`
 can be used.
 
 Integrity can be specified as the boolean value `true` to accept any
@@ -140,10 +140,28 @@ The dependencies are keyed by the requested specifier string and have values
 of either `true`, `null`, a string pointing to a module to be resolved,
 or a conditions object.
 
-The specifier string does not perform any searching and must match exactly
-what is provided to the `require()` or `import`. Therefore, multiple specifiers
-may be needed in the policy if it uses multiple different strings to point
-to the same module (such as excluding the extension).
+The specifier string does not perform any searching and must match exactly what
+is provided to the `require()` or `import`. Therefore, multiple specifiers may
+be needed in the policy if it uses multiple different strings to point to the
+same module (such as excluding the extension). Specifier strings are
+canonicalized but not resolved prior to be used for matching in order to have
+some compatibility with import maps, for example if a resource
+`file:///C:/app/server.js` was given the following redirection from a policy
+located at `file:///C:/app/policy.json`:
+
+```json
+{
+  "dependencies": {
+    "./utils.js": "./utils-v2.js"
+  }
+}
+```
+
+Any specifier used to load `file:///C:/app/utils.js` would then be intercepted
+and redirected to `file:///C:/app/utils-v2.js` instead regardless of using an
+absolute or relative specifier. However, if a specifier that is not an absolute
+or relative URL string is used, it would not be intercepted. So, if an import
+such as `import('#utils')` was used, it would not be intercepted.
 
 If the value of the redirection is `true` the default searching algorithms are
 used to find the module.
@@ -207,7 +225,8 @@ is found by recursively reducing the resource URL by removing segments for
 hash fragment. This leads to the eventual reduction of the URL to its origin.
 If the URL is non-special the scope will be located by the URL's origin. If no
 scope is found for the origin or in the case of opaque origins, a protocol
-string can be used as a scope.
+string can be used as a scope. If no scope is found for the URL's protocol, a
+final empty string `""` scope will be used.
 
 Note, `blob:` URLs adopt their origin from the path they contain, and so a scope
 of `"blob:https://nodejs.org"` will have no effect since no URL can have an
@@ -215,6 +234,61 @@ origin of `blob:https://nodejs.org`; URLs starting with
 `blob:https://nodejs.org/` will use `https://nodejs.org` for its origin and
 thus `https:` for its protocol scope. For opaque origin `blob:` URLs they will
 have `blob:` for their protocol scope since they do not adopt origins.
+
+#### Example
+
+```json
+{
+  "scopes": {
+    "file:///C:/app/": {},
+    "file:": {},
+    "": {},
+  }
+}
+```
+
+Given a file located at `file:///C:/app/bin/main.js`, the following scopes would
+be checked in order:
+
+1. `"file:///C:/app/bin/"`
+
+This determines the policy for all file based resources within
+`"file:///C:/app/bin/"`. This is not in the `"scopes"` field of the policy and
+would be skipped. Adding this scope to the policy would cause it to be used
+prior to the `"file:///C:/app/"` scope.
+
+2. `"file:///C:/app/"`
+
+This determines the policy for all file based resources within
+`"file:///C:/app/"`. This is in the `"scopes"` field of the policy and it would
+determine the policy for the resource at `file:///C:/app/bin/main.js`. If the
+scope has `"cascade": true`, any unsatisfied queries about the resource would
+delegate to the next relevant scope for `file:///C:/app/bin/main.js`, `"file:"`.
+
+3. `"file:///C:/"`
+
+This determines the policy for all file based resources within `"file:///C:/"`.
+This is not in the `"scopes"` field of the policy and would be skipped. It would
+not be used for `file:///C:/app/bin/main.js` unless `"file:///"` is set to
+cascade or is not in the `"scopes"` of the policy.
+
+4. `"file:///"`
+
+This determines the policy for all file based resources on the `localhost`. This
+is not in the `"scopes"` field of the policy and would be skipped. It would not
+be used for `file:///C:/app/bin/main.js` unless `"file:///"` is set to cascade
+or is not in the `"scopes"` of the policy.
+
+5. `"file:"`
+
+This determines the policy for all file based resources. It would not be used
+for `file:///C:/app/bin/main.js` unless `"file:///"` is set to cascade or is not
+in the `"scopes"` of the policy.
+
+6. `""`
+
+This determines the policy for all resources. It would not be used for
+`file:///C:/app/bin/main.js` unless `"file:"` is set to cascade.
 
 #### Integrity using scopes
 
