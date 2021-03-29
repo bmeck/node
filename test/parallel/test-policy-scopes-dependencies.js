@@ -32,7 +32,6 @@ const assert = require('assert');
     });
 
     for (const href of baseURLs) {
-      console.log({href},'???a')
       assert.strictEqual(
         manifest.getDependencyMapper(href).resolve('fs'),
         true
@@ -68,7 +67,6 @@ const assert = require('assert');
     });
 
     for (const href of baseURLs) {
-      console.error({href})
       assert.strictEqual(
         manifest.getDependencyMapper(href).resolve('fs'),
         true

@@ -96,7 +96,7 @@ const dep = fixtures.path('policy', 'parent.js');
     'policy',
     'dependencies',
     'dependencies-scopes-relative-specifier.json');
-  const { status, stderr, stdout } = spawnSync(
+  const { status } = spawnSync(
     process.execPath,
     [
       '--experimental-policy',
@@ -104,7 +104,6 @@ const dep = fixtures.path('policy', 'parent.js');
       fixtures.path('policy', 'canonicalize.mjs')
     ]
   );
-  console.log('%s\n%s', stderr, stdout)
   assert.strictEqual(
     status,
     0,

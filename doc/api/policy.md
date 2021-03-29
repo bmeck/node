@@ -141,13 +141,14 @@ of either `true`, `null`, a string pointing to a module to be resolved,
 or a conditions object.
 
 The specifier string does not perform any searching and must match exactly what
-is provided to the `require()` or `import`. Therefore, multiple specifiers may
-be needed in the policy if it uses multiple different strings to point to the
-same module (such as excluding the extension). Specifier strings are
-canonicalized but not resolved prior to be used for matching in order to have
-some compatibility with import maps, for example if a resource
-`file:///C:/app/server.js` was given the following redirection from a policy
-located at `file:///C:/app/policy.json`:
+is provided to the `require()` or `import` except for a canonicalization step.
+Therefore, multiple specifiers may be needed in the policy if it uses multiple
+different strings to point to the same module (such as excluding the extension).
+
+Specifier strings are canonicalized but not resolved prior to be used for
+matching in order to have some compatibility with import maps, for example if a
+resource `file:///C:/app/server.js` was given the following redirection from a
+policy located at `file:///C:/app/policy.json`:
 
 ```json
 {
