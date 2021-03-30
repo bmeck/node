@@ -95,6 +95,19 @@ const dep = fixtures.path('policy', 'parent.js');
   const depPolicy = fixtures.path(
     'policy',
     'dependencies',
+    'dependencies-missing-policy-default-true.json');
+  const { status } = spawnSync(
+    process.execPath,
+    [
+      '--experimental-policy', depPolicy, dep,
+    ]
+  );
+  assert.strictEqual(status, 0);
+}
+{
+  const depPolicy = fixtures.path(
+    'policy',
+    'dependencies',
     'dependencies-scopes-relative-specifier.json');
   const { status } = spawnSync(
     process.execPath,
