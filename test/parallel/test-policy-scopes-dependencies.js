@@ -120,22 +120,22 @@ const assert = require('assert');
       }
     });
 
-    // for (const href of baseURLs) {
-    //   const redirector = manifest.getDependencyMapper(href);
-    //   if (href.startsWith('file:///root/dir1/')) {
-    //     assert.strictEqual(
-    //       redirector.resolve('fs').href,
-    //       'test:fs2'
-    //     );
-    //   } else if (href === 'file:///root/dir1') {
-    //     assert.strictEqual(
-    //       redirector.resolve('fs').href,
-    //       'test:fs1'
-    //     );
-    //   } else {
-    //     assert.strictEqual(redirector.resolve('fs'), null);
-    //   }
-    // }
+    for (const href of baseURLs) {
+      const redirector = manifest.getDependencyMapper(href);
+      if (href.startsWith('file:///root/dir1/')) {
+        assert.strictEqual(
+          redirector.resolve('fs').href,
+          'test:fs2'
+        );
+      } else if (href === 'file:///root/dir1') {
+        assert.strictEqual(
+          redirector.resolve('fs').href,
+          'test:fs1'
+        );
+      } else {
+        assert.strictEqual(redirector.resolve('fs'), null);
+      }
+    }
 
     assert.strictEqual(
       manifest
