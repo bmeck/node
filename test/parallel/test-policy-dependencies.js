@@ -114,7 +114,7 @@ const dep = fixtures.path('policy', 'parent.js');
     [
       '--experimental-policy',
       depPolicy,
-      fixtures.path('policy', 'canonicalize.mjs')
+      fixtures.path('policy', 'canonicalize.mjs'),
     ]
   );
   assert.strictEqual(
