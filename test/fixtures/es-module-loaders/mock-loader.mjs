@@ -28,19 +28,30 @@ export function getGlobalPreloadCode({port}) {
     let mockVersion = 0;
     const doMock = (resolved, replacementProperties) => {
       let exports = Object.keys(replacementProperties);
-      let shadow = Object.create(null);
       let namespace = Object.create(null);
+      let listeners = [];
       for (const name of exports) {
+        let currentValue = replacementProperties[name];
         Object.defineProperty(namespace, name, {
+          enumerable: true,
           get() {
-            return shadow[name];
+            return currentValue;
           },
           set(v) {
-            shadow[name] = v;
+            currentValue = v;
+            for (let fn of listeners) {
+              try {
+                fn(name);
+              } catch {
+              }
+            }
           }
         });
       }
-      mockedModules.set(resolved, replacementProperties);
+      mockedModules.set(resolved, {
+        namespace,
+        listeners
+      });
       mockVersion++;
       port.postMessage({mockVersion, resolved, exports });
       return namespace;
@@ -106,11 +117,19 @@ export function getFormat(url, context, defaultGetFormat) {
 }
 
 function generateModule(exports) {
-  let body = 'export {};'
+  let body = 'export {};let mapping = {__proto__: null};'
   for (const [i, name] of Object.entries(exports)) {
     let key = JSON.stringify(name);
-    body += `var _${i} = import.meta.mock[${key}];`
+    body += `var _${i} = import.meta.mock.namespace[${key}];`
+    body += `Object.defineProperty(mapping, ${key}, {enumerable: true,set(v) {_${i} = v;}});`
     body += `export {_${i} as ${name}};`;
   }
+  body += `import.meta.mock.listeners.push(${
+    () => {
+      for (var k in mapping) {
+        mapping[k] = import.meta.mock.namespace[k];
+      }
+    }
+  });`
   return body;
 }
