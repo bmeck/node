@@ -2,7 +2,7 @@
 // ./test/fixtures/es-module-loaders/mock-loader.mjs
 import {allowGlobals} from '../common/index.mjs';
 import assert from 'assert/strict';
-allowGlobals(mock);
+import mock from 'node:mock';
 
 mock('node:events', {
   EventEmitter: 'This is mocked!'

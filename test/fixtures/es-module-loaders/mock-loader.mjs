@@ -26,7 +26,7 @@ export function getGlobalPreloadCode({port}) {
   return `(${()=>{
     let mockedModules = new Map();
     let mockVersion = 0;
-    globalThis.mock = (resolved, replacementProperties) => {
+    const doMock = (resolved, replacementProperties) => {
       let exports = Object.keys(replacementProperties);
       let shadow = Object.create(null);
       let namespace = Object.create(null);
@@ -46,6 +46,10 @@ export function getGlobalPreloadCode({port}) {
       return namespace;
     }
     setImportMetaCallback((meta, context, parent) => {
+      if (context.url === 'node:mock') {
+        meta.doMock = doMock;
+        return;
+      }
       if (context.url.startsWith('mock:')) {
         let [proto, version, encodedTargetURL] = context.url.split(':');
         let decodedTargetURL = decodeURIComponent(encodedTargetURL);
@@ -56,13 +60,15 @@ export function getGlobalPreloadCode({port}) {
       }
       parent(meta, context);
     });
-    globalThis.mock.map = mockedModules;
   }})()`;
 }
 
 
 // rewrites node: loading to node-custom: so that it can be intercepted
 export function resolve(specifier, context, defaultResolve) {
+  if (specifier === 'node:mock') {
+    return {url: specifier};
+  }
   doDrainPort();
   const def = defaultResolve(specifier, context);
   if (context.parentURL?.startsWith('mock:')) {
@@ -79,6 +85,9 @@ export function resolve(specifier, context, defaultResolve) {
 
 export function getSource(url, context, defaultGetSource) {
   doDrainPort();
+  if (url === 'node:mock') {
+    return {source: 'export default import.meta.doMock'};
+  }
   if (url.startsWith('mock:')) {
     let [proto, version, encodedTargetURL] = url.split(':');
     let ret = generateModule(mockedModuleExports.get(
@@ -90,7 +99,7 @@ export function getSource(url, context, defaultGetSource) {
 }
 
 export function getFormat(url, context, defaultGetFormat) {
-  if (url.startsWith('mock:')) {
+  if (url === 'node:mock' || url.startsWith('mock:')) {
     return { format: 'module' };
   }
   return defaultGetFormat(url, context, defaultGetFormat);
