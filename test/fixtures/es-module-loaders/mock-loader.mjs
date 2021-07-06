@@ -22,7 +22,8 @@ let preloadPort;
 export function getGlobalPreloadCode({port}) {
   preloadPort = port;
   port.on('message', onPreloadPortMessage);
-  return `
+  port.unref();
+  return `(${()=>{
     let mockedModules = new Map();
     let mockVersion = 0;
     globalThis.mock = (resolved, replacementProperties) => {
@@ -55,7 +56,8 @@ export function getGlobalPreloadCode({port}) {
       }
       parent(meta, context);
     });
-    globalThis.mock.map = mockedModules;`;
+    globalThis.mock.map = mockedModules;
+  }})()`;
 }
 
 
@@ -95,7 +97,7 @@ export function getFormat(url, context, defaultGetFormat) {
 }
 
 function generateModule(exports) {
-  let body = 'export {};console.dir(import.meta);'
+  let body = 'export {};'
   for (const [i, name] of Object.entries(exports)) {
     let key = JSON.stringify(name);
     body += `var _${i} = import.meta.mock[${key}];`

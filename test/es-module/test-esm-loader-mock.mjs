@@ -1,15 +1,30 @@
-// Flags: --experimental-loader ./test/fixtures/es-module-loaders/mock-loader.mjs
-import '../common/index.mjs';
+// Flags: --experimental-loader
+// ./test/fixtures/es-module-loaders/mock-loader.mjs
+import {allowGlobals} from '../common/index.mjs';
 import assert from 'assert/strict';
+allowGlobals(mock);
 
 mock('node:events', {
-  default: 'mocked default',
   EventEmitter: 'This is mocked!'
 });
 
-console.dir(await import('node:events'));
+// this resolves to node:events
+assert.deepStrictEqual(await import('events'), Object.defineProperty({
+  __proto__: null,
+  EventEmitter: 'This is mocked!'
+}, Symbol.toStringTag, {
+  enumerable: false,
+  value: 'Module'
+}));
 
-// mock('node:events', {
-//   EventEmitter: 'This is mocked!... version 2.0'
-// });
-// console.dir(await import('events'));
+mock('node:events', {
+  EventEmitter: 'This is mocked v2!'
+});
+
+assert.deepStrictEqual(await import('node:events'), Object.defineProperty({
+  __proto__: null,
+  EventEmitter: 'This is mocked v2!'
+}, Symbol.toStringTag, {
+  enumerable: false,
+  value: 'Module'
+}));
