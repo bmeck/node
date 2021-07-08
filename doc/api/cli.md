@@ -245,6 +245,7 @@ Use of this command-line flag is no longer required.
 <!-- YAML
 added: REPLACEME
 -->
+> Stability: 1 - Experimental
 
 Enable experimental support for loading modules using `import` over `https:`.
 
