@@ -589,6 +589,10 @@ work in Node.js with a few differences due to application stability and security
 concerns that are different when running in a privileged environment instead of
 a browser sandbox.
 
+### Imports are limited to HTTP/1
+
+Automatic protocol negotiation for HTTP/2 and HTTP/3 is not yet supported.
+
 ### HTTP is limited to loopback addresses
 
 `http:` is vulnerable to man in the middle attacks and is not allowed to be used
